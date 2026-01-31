@@ -1,10 +1,21 @@
 {
     "name": "cursor-cost-info",
-    "displayName": "Cursor 额度信息",
-    "description": "在状态栏显示 Cursor API 使用额度信息",
-    "version": "1.0.2",
-    "publisher": "Aggron Magic",
-    "repository": "https://github.com/aggronmagi/cursor_cost_info",
+    "displayName": "Cursor Cost Info",
+    "description": "Cursor Cost Info Extension",
+    "version": "1.0.4",
+    "publisher": "zhangzhihua",
+    "author": {
+        "name": "徐凤年",
+        "email": "zhangzhihua.email@gmail.com"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ke112/cursor-cost-info"
+    },
+    "homepage": "https://github.com/ke112",
+    "bugs": {
+        "url": "https://github.com/ke112/cursor-cost-info/issues"
+    },
     "engines": {
         "vscode": "^1.80.0"
     },
@@ -19,11 +30,11 @@
         "commands": [
             {
                 "command": "cursor.costInfo.refresh",
-                "title": "刷新 Cursor 额度信息"
+                "title": "Refresh Cursor Cost Info"
             }
         ],
         "configuration": {
-            "title": "Cursor 额度信息",
+            "title": "Cursor Cost Info",
             "properties": {
                 "cursorCostInfo.cookie": {
                     "type": "string",
