@@ -152,13 +152,14 @@ export interface TotalUsage {
 export function calculateTotalUsage(summary: UsageSummary, customOnDemandLimit: number | null): TotalUsage {
     const plan = summary.individualUsage.plan;
     const onDemand = summary.individualUsage.onDemand;
+    const planUsed = typeof plan.breakdown?.total === 'number' ? plan.breakdown.total : plan.used;
 
     // 使用自定义限制或 API 返回的限制
     const onDemandLimit = customOnDemandLimit !== null
         ? customOnDemandLimit
         : (onDemand.limit !== null ? onDemand.limit : 0);
 
-    const totalUsed = plan.used + onDemand.used;
+    const totalUsed = planUsed + onDemand.used;
     const totalLimit = plan.limit + onDemandLimit;
     const totalRemaining = (totalLimit - totalUsed);
     const percentage = totalLimit > 0 ? Math.round((totalUsed / totalLimit) * 100) : 0;
@@ -168,7 +169,7 @@ export function calculateTotalUsage(summary: UsageSummary, customOnDemandLimit: 
         totalLimit,
         totalRemaining,
         percentage,
-        planUsed: plan.used,
+        planUsed,
         planLimit: plan.limit,
         onDemandUsed: onDemand.used,
         onDemandLimit
