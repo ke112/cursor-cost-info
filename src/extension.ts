@@ -21,7 +21,7 @@ export function activate(context: vscode.ExtensionContext) {
     100 // 优先级，数字越大越靠左
   );
   statusBarItem.command = 'cursor.costInfo.showDetails';
-  statusBarItem.tooltip = '点击查看 Cursor 额度详情';
+  statusBarItem.tooltip = '点击在浏览器中打开 Cursor 额度详情';
   context.subscriptions.push(statusBarItem);
 
   // 注册显示详情命令
@@ -213,14 +213,9 @@ async function updateUsageInfo() {
  * 显示详情面板（点击状态栏时调用）
  */
 async function showDetailsPanel(context: vscode.ExtensionContext) {
-  // 如果面板不存在，创建它
-  if (!webViewPanel) {
-    createWebViewPanel(context);
-  } else {
-    // 如果面板已存在，显示它并刷新数据
-    webViewPanel.reveal();
-    await updateUsageInfo();
-  }
+  // 打开系统浏览器访问 Cursor 使用情况页面
+  const url = vscode.Uri.parse('https://cursor.com/cn/dashboard?tab=usage');
+  await vscode.env.openExternal(url);
 }
 
 /**
@@ -654,9 +649,6 @@ function getDetailedTooltip(summary: UsageSummary, customOnDemandLimit: number |
   const total = calculateTotalUsage(summary, customOnDemandLimit);
   const planUsed = total.planUsed;
   const teamOnDemand = summary.teamUsage?.onDemand ?? { used: 0, limit: null, remaining: null };
-  const teamRemaining = teamOnDemand.remaining !== null && teamOnDemand.remaining !== undefined
-    ? teamOnDemand.remaining
-    : (teamOnDemand.limit !== null && teamOnDemand.limit !== undefined ? teamOnDemand.limit - teamOnDemand.used : null);
 
   const lines = [
     '=== Cursor 使用情况 ===',
@@ -666,7 +658,7 @@ function getDetailedTooltip(summary: UsageSummary, customOnDemandLimit: number |
     `个人已用: ${formatCurrency(planUsed)}`,
     `团队已用: ${formatCurrency(teamOnDemand.used)}`,
     '',
-    '💡 点击查看完整详情'
+    '💡 提示：点击状态栏项将在浏览器中打开完整详情'
   ];
 
   return lines.join('\n');
