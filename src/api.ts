@@ -26,6 +26,9 @@ export interface UsageSummary {
             apiSpend: number;
             autoLimit: number;
             apiLimit: number;
+            autoPercentUsed: number;
+            apiPercentUsed: number;
+            totalPercentUsed: number;
         };
         onDemand: {
             enabled: boolean;
@@ -227,15 +230,24 @@ export function generateProgressBar(percentage: number, length: number = 10): st
  * @param summary 使用情况摘要
  * @param customOnDemandLimit 自定义 onDemand 限额
  * @param showProgressBar 是否显示进度条，默认 true（现在使用小球代替）
+ * @param isUnlimited 是否无限额套餐，true 时只显示已用金额
  * @returns 格式化后的文本
  */
 export function formatUsageDisplay(
     summary: UsageSummary,
     customOnDemandLimit: number | null = null,
-    showProgressBar: boolean = true
+    showProgressBar: boolean = true,
+    isUnlimited: boolean = false
 ): string {
     const total = calculateTotalUsage(summary, customOnDemandLimit);
     const usedStr = formatCurrency(total.totalUsed);
+
+    // 无限额套餐：只显示已用金额，不显示限额和百分比
+    if (isUnlimited) {
+        const indicator = getUsageIndicator(0); // 无限额时使用绿色指示器
+        return `${indicator} 已用: ${usedStr}`;
+    }
+
     const limitStr = formatCurrency(total.totalLimit);
 
     if (showProgressBar) {
@@ -251,11 +263,22 @@ export function formatUsageDisplay(
  * 获取简短的使用情况文本
  * @param summary 使用情况摘要
  * @param customOnDemandLimit 自定义 onDemand 限额
+ * @param isUnlimited 是否无限额套餐
  * @returns 简短文本
  */
-export function getShortUsageText(summary: UsageSummary, customOnDemandLimit: number | null = null): string {
+export function getShortUsageText(
+    summary: UsageSummary,
+    customOnDemandLimit: number | null = null,
+    isUnlimited: boolean = false
+): string {
     const total = calculateTotalUsage(summary, customOnDemandLimit);
     const usedStr = formatCurrency(total.totalUsed);
+
+    // 无限额套餐：只显示已用金额
+    if (isUnlimited) {
+        return `$(pulse) 已用: ${usedStr}`;
+    }
+
     const limitStr = formatCurrency(total.totalLimit);
     return `$(pulse) ${usedStr}/${limitStr}`;
 }
