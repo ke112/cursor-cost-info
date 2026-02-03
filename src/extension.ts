@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { calculateTotalUsage, fetchUsageSummary, formatCurrency, formatUsageDisplay, getUsageColor, UsageSummary } from './api';
+import { calculateTotalUsage, fetchUsageSummary, fetchUsageEvents, formatCurrency, formatUsageDisplay, getUsageColor, UsageSummary, UsageEventsResponse, UsageEvent, formatTimestamp, formatModelName, formatTokenCount } from './api';
 import { getConfigHelpText, readCursorCookie, validateCookie } from './config';
 
 let statusBarItem: vscode.StatusBarItem;
@@ -9,6 +9,7 @@ let currentSummary: UsageSummary | undefined;
 let currentCustomOnDemandLimit: number | null = null;
 let lastNotificationPercentage: number | null = null; // 记录上次发送通知的百分比
 let isLoadFailed: boolean = false; // 追踪是否获取失败
+let currentUsageEvents: UsageEvent[] = []; // 存储最近的使用事件
 
 /**
  * 扩展激活时调用
@@ -151,8 +152,23 @@ async function updateUsageInfo() {
       return;
     }
 
-    // 调用 API
-    const summary = await fetchUsageSummary(cookie);
+    // 并行调用 API 获取使用摘要和使用事件
+    const [summary, usageEventsResponse] = await Promise.all([
+      fetchUsageSummary(cookie),
+      fetchUsageEvents(cookie, 10).catch((err) => {
+        console.error('获取使用事件失败:', err);
+        return null;
+      })
+    ]);
+
+    // 保存使用事件数据
+    console.log('使用事件响应:', usageEventsResponse);
+    if (usageEventsResponse && usageEventsResponse.usageEventsDisplay) {
+      currentUsageEvents = usageEventsResponse.usageEventsDisplay;
+      console.log('已保存使用事件数量:', currentUsageEvents.length);
+    } else {
+      console.log('未获取到使用事件数据');
+    }
 
     // 获取配置
     const config = vscode.workspace.getConfiguration('cursorCostInfo');
@@ -682,32 +698,49 @@ function getDetailedTooltip(summary: UsageSummary, customOnDemandLimit: number |
   const planUsed = total.planUsed;
   const teamOnDemand = summary.teamUsage?.onDemand ?? { used: 0, limit: null, remaining: null };
 
+  let lines: string[] = [];
+
   // 无限额套餐：只显示已用金额，不显示限额和百分比
   if (summary.isUnlimited) {
-    const lines = [
+    lines = [
       '=== Cursor 使用情况 (无限额) ===',
       '',
       `总计已用: ${formatCurrency(total.totalUsed)}`,
       '',
       `个人已用: ${formatCurrency(planUsed)}`,
-      `团队已用: ${formatCurrency(teamOnDemand.used)}`,
-      '',
-      '💡 点击在浏览器中打开完整详情'
+      `团队已用: ${formatCurrency(teamOnDemand.used)}`
     ];
-    return lines.join('\n');
+  } else {
+    // 有限额套餐：显示完整信息
+    lines = [
+      '=== Cursor 使用情况 ===',
+      '',
+      `总计: ${formatCurrency(total.totalUsed)} / ${formatCurrency(total.totalLimit)} (${total.percentage}%)`,
+      '',
+      `个人已用: ${formatCurrency(planUsed)}`,
+      `团队已用: ${formatCurrency(teamOnDemand.used)}`
+    ];
   }
 
-  // 有限额套餐：显示完整信息
-  const lines = [
-    '=== Cursor 使用情况 ===',
-    '',
-    `总计: ${formatCurrency(total.totalUsed)} / ${formatCurrency(total.totalLimit)} (${total.percentage}%)`,
-    '',
-    `个人已用: ${formatCurrency(planUsed)}`,
-    `团队已用: ${formatCurrency(teamOnDemand.used)}`,
-    '',
-    '💡 点击在浏览器中打开完整详情'
-  ];
+  // 添加最近使用记录
+  if (currentUsageEvents && currentUsageEvents.length > 0) {
+    lines.push('');
+    lines.push('--- 最近使用记录 ---');
+    lines.push('时间       | 模型        | Token   | 花费');
+    lines.push('─'.repeat(45));
+
+    for (const event of currentUsageEvents) {
+      const time = formatTimestamp(event.timestamp);
+      const model = formatModelName(event.model).padEnd(11);
+      const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0);
+      const tokens = formatTokenCount(totalTokens).padStart(7);
+      const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`;
+      lines.push(`${time} | ${model} | ${tokens} | ${cost}`);
+    }
+  }
+
+  lines.push('');
+  lines.push('💡 点击在浏览器中打开完整详情');
 
   return lines.join('\n');
 }
