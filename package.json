@@ -2,7 +2,7 @@
     "name": "cursor-cost-info",
     "displayName": "Cursor Cost Info",
     "description": "Cursor Cost Info Extension",
-    "version": "1.0.5",
+    "version": "1.0.20",
     "publisher": "zhangzhihua",
     "author": {
         "name": "徐凤年",
@@ -28,6 +28,10 @@
     "main": "./out/extension.js",
     "contributes": {
         "commands": [
+            {
+                "command": "cursor.costInfo.showDetails",
+                "title": "Show Cursor Cost Details"
+            },
             {
                 "command": "cursor.costInfo.refresh",
                 "title": "Refresh Cursor Cost Info"

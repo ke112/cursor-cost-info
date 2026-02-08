@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { resolveAuth, getConfigHelpText } from './config';
-import { fetchUsageSummaryAuto, formatUsageDisplay, UsageSummary, calculateTotalUsage, formatCurrency, getUsageColor } from './api';
+import { fetchUsageSummaryAuto, fetchUsageEvents, formatUsageDisplay, UsageSummary, UsageEvent, calculateTotalUsage, formatCurrency, getUsageColor, formatTimestamp, formatModelName, formatTokenCount } from './api';
 
 let statusBarItem: vscode.StatusBarItem;
 let refreshTimer: NodeJS.Timeout | undefined;
@@ -8,6 +8,8 @@ let webViewPanel: vscode.WebviewPanel | undefined;
 let currentSummary: UsageSummary | undefined;
 let currentCustomOnDemandLimit: number | null = null;
 let lastNotificationPercentage: number | null = null; // 记录上次发送通知的百分比
+let isLoadFailed: boolean = false; // 追踪是否获取失败
+let currentUsageEvents: UsageEvent[] = []; // 存储最近的使用事件
 
 /**
  * 扩展激活时调用
@@ -20,9 +22,18 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     100 // 优先级，数字越大越靠左
   );
-  statusBarItem.command = 'cursor.costInfo.refresh';
-  statusBarItem.tooltip = '点击刷新 Cursor 额度信息';
+  statusBarItem.command = 'cursor.costInfo.showDetails';
+  statusBarItem.tooltip = '点击在浏览器中打开 Cursor 额度详情';
   context.subscriptions.push(statusBarItem);
+
+  // 注册显示详情命令
+  const showDetailsCommand = vscode.commands.registerCommand(
+    'cursor.costInfo.showDetails',
+    async () => {
+      await showDetailsPanel(context);
+    }
+  );
+  context.subscriptions.push(showDetailsCommand);
 
   // 注册刷新命令
   const refreshCommand = vscode.commands.registerCommand(
@@ -143,6 +154,18 @@ async function updateUsageInfo() {
     // 根据认证类型自动选择 API 端点
     const summary = await fetchUsageSummaryAuto(auth);
 
+    // 获取使用事件（仅 Cookie 认证时支持）
+    if (auth.type === 'cookie') {
+      try {
+        const usageEventsResponse = await fetchUsageEvents(auth.value, 10);
+        if (usageEventsResponse && usageEventsResponse.usageEventsDisplay) {
+          currentUsageEvents = usageEventsResponse.usageEventsDisplay;
+        }
+      } catch (err) {
+        console.error('获取使用事件失败:', err);
+      }
+    }
+
     // 获取配置
     const config = vscode.workspace.getConfiguration('cursorCostInfo');
     const customOnDemandLimit = config.get<number | null>('onDemandLimit', null);
@@ -155,22 +178,29 @@ async function updateUsageInfo() {
     // 计算总使用情况
     const total = calculateTotalUsage(summary, customOnDemandLimit);
 
-    // 更新状态栏显示
-    const displayText = formatUsageDisplay(summary, customOnDemandLimit, showProgressBar);
+    // 更新状态栏显示（传入 isUnlimited 参数）
+    const displayText = formatUsageDisplay(summary, customOnDemandLimit, showProgressBar, summary.isUnlimited);
     statusBarItem.text = displayText;
 
-    // 设置颜色
-    statusBarItem.color = getUsageColor(total.percentage);
-
-    // 设置背景色（高使用率时显示警告/错误背景）
-    if (total.percentage >= 90) {
-      statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-    } else if (total.percentage >= 80) {
-      statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-    } else {
+    // 设置颜色（无限额时使用默认绿色）
+    if (summary.isUnlimited) {
+      statusBarItem.color = getUsageColor(0);
       statusBarItem.backgroundColor = undefined;
+    } else {
+      statusBarItem.color = getUsageColor(total.percentage);
+      // 设置背景色（高使用率时显示警告/错误背景）
+      if (total.percentage >= 90) {
+        statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+      } else if (total.percentage >= 80) {
+        statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+      } else {
+        statusBarItem.backgroundColor = undefined;
+      }
     }
 
+    // 成功获取：设置状态和命令
+    isLoadFailed = false;
+    statusBarItem.command = 'cursor.costInfo.showDetails';
     statusBarItem.tooltip = getDetailedTooltip(summary, customOnDemandLimit);
     statusBarItem.show();
 
@@ -178,13 +208,16 @@ async function updateUsageInfo() {
     updateWebView(summary, customOnDemandLimit);
 
     // 检查并发送通知
-    checkAndSendNotification(total.percentage, total.totalUsed, total.totalLimit);
+    //checkAndSendNotification(total.percentage, total.totalUsed, total.totalLimit);
 
   } catch (error) {
     console.error('更新使用情况失败:', error);
 
+    // 失败：设置状态和命令（点击时触发刷新而非打开浏览器）
+    isLoadFailed = true;
     statusBarItem.text = '$(error) Cursor: 获取失败';
-    statusBarItem.tooltip = `错误: ${error instanceof Error ? error.message : '未知错误'}`;
+    statusBarItem.tooltip = `错误: ${error instanceof Error ? error.message : '未知错误'}\n\n💡 点击重试`;
+    statusBarItem.command = 'cursor.costInfo.refresh';
     statusBarItem.color = '#F48771';
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     statusBarItem.show();
@@ -195,6 +228,15 @@ async function updateUsageInfo() {
       `获取 Cursor 额度信息失败: ${error instanceof Error ? error.message : '未知错误'}`
     );
   }
+}
+
+/**
+ * 显示详情面板（点击状态栏时调用）
+ */
+async function showDetailsPanel(context: vscode.ExtensionContext) {
+  // 打开系统浏览器访问 Cursor 使用情况页面
+  const url = vscode.Uri.parse('https://cursor.com/cn/dashboard?tab=usage');
+  await vscode.env.openExternal(url);
 }
 
 /**
@@ -264,6 +306,19 @@ function updateWebView(summary: UsageSummary | null | undefined, customOnDemandL
     return;
   }
 
+  // 检查 WebView 是否已被销毁
+  try {
+    // 尝试访问 webview 属性来检查是否仍然有效
+    if (!webViewPanel.webview) {
+      webViewPanel = undefined;
+      return;
+    }
+  } catch (e) {
+    // WebView 已被销毁，清理引用
+    webViewPanel = undefined;
+    return;
+  }
+
   let html = '';
 
   if (error) {
@@ -275,7 +330,13 @@ function updateWebView(summary: UsageSummary | null | undefined, customOnDemandL
     html = getUsageWebViewHtml(summary, total, customOnDemandLimit);
   }
 
-  webViewPanel.webview.html = html;
+  try {
+    webViewPanel.webview.html = html;
+  } catch (e) {
+    // WebView 在设置内容时被销毁，清理引用
+    console.warn('WebView 已被销毁，无法更新内容:', e);
+    webViewPanel = undefined;
+  }
 }
 
 /**
@@ -283,9 +344,56 @@ function updateWebView(summary: UsageSummary | null | undefined, customOnDemandL
  */
 function getUsageWebViewHtml(summary: UsageSummary, total: any, customOnDemandLimit: number | null): string {
   const plan = summary.individualUsage.plan;
-  const onDemand = summary.individualUsage.onDemand;
-  const color = getUsageColor(total.percentage);
+  const teamOnDemand = summary.teamUsage?.onDemand ?? { used: 0, limit: null, remaining: null };
+  const planUsed = typeof plan.breakdown?.total === 'number' ? plan.breakdown.total : plan.used;
+  const teamRemaining = teamOnDemand.remaining !== null && teamOnDemand.remaining !== undefined
+    ? teamOnDemand.remaining
+    : (teamOnDemand.limit !== null && teamOnDemand.limit !== undefined ? teamOnDemand.limit - teamOnDemand.used : null);
+
+  // 无限额套餐：使用绿色，不显示进度条
+  const isUnlimited = summary.isUnlimited;
+  const color = isUnlimited ? getUsageColor(0) : getUsageColor(total.percentage);
   const progressBar = '█'.repeat(Math.round((total.percentage / 100) * 20)) + '░'.repeat(20 - Math.round((total.percentage / 100) * 20));
+
+  // 根据 isUnlimited 生成不同的摘要卡片内容
+  const summaryCardContent = isUnlimited
+    ? `
+        <div class="summary-title">总计使用情况 (无限额)</div>
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-label">已用</div>
+                <div class="stat-value">${formatCurrency(total.totalUsed)}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">限额</div>
+                <div class="stat-value">无限</div>
+            </div>
+        </div>
+    `
+    : `
+        <div class="summary-title">总计使用情况</div>
+        <div class="progress-container">
+            <div class="progress-bar">[${progressBar}] ${total.percentage}%</div>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-label">已用</div>
+                <div class="stat-value">${formatCurrency(total.totalUsed)}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">限额</div>
+                <div class="stat-value">${formatCurrency(total.totalLimit)}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">剩余</div>
+                <div class="stat-value">${formatCurrency(total.totalRemaining)}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">使用率</div>
+                <div class="stat-value">${total.percentage}%</div>
+            </div>
+        </div>
+    `;
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -407,35 +515,14 @@ function getUsageWebViewHtml(summary: UsageSummary, total: any, customOnDemandLi
     </div>
 
     <div class="summary-card">
-        <div class="summary-title">总计使用情况</div>
-        <div class="progress-container">
-            <div class="progress-bar">[${progressBar}] ${total.percentage}%</div>
-        </div>
-        <div class="stats-grid">
-            <div class="stat-item">
-                <div class="stat-label">已用</div>
-                <div class="stat-value">${formatCurrency(total.totalUsed)}</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-label">限额</div>
-                <div class="stat-value">${formatCurrency(total.totalLimit)}</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-label">剩余</div>
-                <div class="stat-value">${formatCurrency(total.totalRemaining)}</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-label">使用率</div>
-                <div class="stat-value">${total.percentage}%</div>
-            </div>
-        </div>
+        ${summaryCardContent}
     </div>
 
     <div class="section">
         <div class="section-title">📋 计划使用 (Plan)</div>
         <div class="detail-row">
             <span class="detail-label">已用</span>
-            <span class="detail-value">${formatCurrency((plan.used / 100.0))}</span>
+            <span class="detail-value">${formatCurrency((planUsed / 100.0))}</span>
         </div>
         <div class="detail-row">
             <span class="detail-label">限额</span>
@@ -448,18 +535,18 @@ function getUsageWebViewHtml(summary: UsageSummary, total: any, customOnDemandLi
     </div>
 
     <div class="section">
-        <div class="section-title">⚡ 按需使用 (OnDemand)</div>
+        <div class="section-title">👥 团队使用 (Team)</div>
         <div class="detail-row">
             <span class="detail-label">已用</span>
-            <span class="detail-value">${formatCurrency((onDemand.used / 100.0))}</span>
+            <span class="detail-value">${formatCurrency((teamOnDemand.used / 100.0))}</span>
         </div>
         <div class="detail-row">
             <span class="detail-label">限额</span>
-            <span class="detail-value">${formatCurrency((total.onDemandLimit / 100.0))}${customOnDemandLimit !== null ? ' (自定义)' : ''}</span>
+            <span class="detail-value">${teamOnDemand.limit === null ? '不限' : formatCurrency((teamOnDemand.limit / 100.0))}</span>
         </div>
         <div class="detail-row">
             <span class="detail-label">剩余</span>
-            <span class="detail-value">${formatCurrency(((total.onDemandLimit - onDemand.used) / 100.0))}</span>
+            <span class="detail-value">${teamRemaining === null ? '—' : formatCurrency((teamRemaining / 100.0))}</span>
         </div>
     </div>
 
@@ -647,51 +734,53 @@ function getErrorWebViewHtml(error: string): string {
  * 生成详细的工具提示信息
  */
 function getDetailedTooltip(summary: UsageSummary, customOnDemandLimit: number | null = null): string {
-  const plan = summary.individualUsage.plan;
-  const onDemand = summary.individualUsage.onDemand;
   const total = calculateTotalUsage(summary, customOnDemandLimit);
+  const planUsed = total.planUsed;
+  const teamOnDemand = summary.teamUsage?.onDemand ?? { used: 0, limit: null, remaining: null };
 
-  const lines = [
-    '=== Cursor 使用情况 ===',
-    '',
-    `会员类型: ${summary.membershipType}`,
-    `限制类型: ${summary.limitType}`,
-    `无限制: ${summary.isUnlimited ? '是' : '否'}`,
-    '',
-    '--- 总计使用 ---',
-    `已用: ${formatCurrency(total.totalUsed)}`,
-    `限额: ${formatCurrency(total.totalLimit)}`,
-    `剩余: ${formatCurrency(total.totalRemaining)}`,
-    `百分比: ${total.percentage}%`,
-    '',
-    '--- 计划使用 (Plan) ---',
-    `已用: ${formatCurrency(plan.used)}`,
-    `限额: ${formatCurrency(plan.limit)}`,
-    `剩余: ${formatCurrency(plan.remaining)}`,
-    '',
-    '--- 按需使用 (OnDemand) ---',
-    `已用: ${formatCurrency(onDemand.used)}`,
-    `限额: ${formatCurrency(total.onDemandLimit)}${customOnDemandLimit !== null ? ' (自定义)' : ''}`,
-    `剩余: ${formatCurrency(total.onDemandLimit - onDemand.used)}`,
-    '',
-    '--- 花费/使用率明细 ---',
-    ...(plan.autoSpend !== undefined ? [`自动花费: ${formatCurrency(plan.autoSpend)}`] : []),
-    ...(plan.apiSpend !== undefined ? [`API 花费: ${formatCurrency(plan.apiSpend)}`] : []),
-    ...(plan.autoPercentUsed !== undefined ? [`自动模型使用率: ${plan.autoPercentUsed.toFixed(1)}%`] : []),
-    ...(plan.apiPercentUsed !== undefined ? [`API 使用率: ${plan.apiPercentUsed.toFixed(1)}%`] : []),
-    ...(plan.totalPercentUsed !== undefined ? [`总使用率: ${plan.totalPercentUsed.toFixed(1)}%`] : []),
-    '',
-    '--- 使用明细 ---',
-    `包含: ${formatCurrency(plan.breakdown.included)}`,
-    `奖励: ${formatCurrency(plan.breakdown.bonus)}`,
-    `总计: ${formatCurrency(plan.breakdown.total)}`,
-    '',
-    '--- 计费周期 ---',
-    `开始: ${new Date(summary.billingCycleStart).toLocaleString('zh-CN')}`,
-    `结束: ${new Date(summary.billingCycleEnd).toLocaleString('zh-CN')}`,
-    '',
-    '💡 点击刷新数据'
-  ];
+  let lines: string[] = [];
+
+  // 无限额套餐：只显示已用金额，不显示限额和百分比
+  if (summary.isUnlimited) {
+    lines = [
+      '=== Cursor 使用情况 (无限额) ===',
+      '',
+      `总计已用: ${formatCurrency(total.totalUsed)}`,
+      '',
+      `个人已用: ${formatCurrency(planUsed)}`,
+      `团队已用: ${formatCurrency(teamOnDemand.used)}`
+    ];
+  } else {
+    // 有限额套餐：显示完整信息
+    lines = [
+      '=== Cursor 使用情况 ===',
+      '',
+      `总计: ${formatCurrency(total.totalUsed)} / ${formatCurrency(total.totalLimit)} (${total.percentage}%)`,
+      '',
+      `个人已用: ${formatCurrency(planUsed)}`,
+      `团队已用: ${formatCurrency(teamOnDemand.used)}`
+    ];
+  }
+
+  // 添加最近使用记录
+  if (currentUsageEvents && currentUsageEvents.length > 0) {
+    lines.push('');
+    lines.push('--- 最近使用记录 ---');
+    lines.push('时间       | 模型        | Token   | 花费');
+    lines.push('─'.repeat(45));
+
+    for (const event of currentUsageEvents) {
+      const time = formatTimestamp(event.timestamp);
+      const model = formatModelName(event.model).padEnd(11);
+      const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0);
+      const tokens = formatTokenCount(totalTokens).padStart(7);
+      const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`;
+      lines.push(`${time} | ${model} | ${tokens} | ${cost}`);
+    }
+  }
+
+  lines.push('');
+  lines.push('💡 点击在浏览器中打开完整详情');
 
   return lines.join('\n');
 }
