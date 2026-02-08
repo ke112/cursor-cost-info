@@ -1,6 +1,17 @@
 import * as vscode from 'vscode';
+import { readCursorAccessToken } from './auth';
 
 const CURSOR_COOKIE_DOMAIN = 'cursor.com';
+
+/**
+ * 认证凭据类型
+ * token: 从 Cursor 本地存储读取的 JWT accessToken，配合 api2.cursor.sh 使用
+ * cookie: 手动配置或从浏览器读取的 Cookie，配合 cursor.com 使用
+ */
+export interface AuthCredentials {
+    type: 'token' | 'cookie';
+    value: string;
+}
 
 /**
  * 从浏览器读取 cursor.com 的 Cookie（当本地未配置时使用）
@@ -24,11 +35,10 @@ async function readCursorCookieFromBrowser(): Promise<string | null> {
 }
 
 /**
- * 从 VS Code 配置或浏览器读取 Cursor Cookie
- * 优先使用本地配置 cursorCostInfo.cookie；若未配置则尝试从浏览器 cookie 中读取 cursor.com 的 cookie
- * @returns Cookie 字符串，若均不可用则返回 null
+ * 从 VS Code 配置读取手动设置的 Cookie
+ * @returns Cookie 字符串，若未配置则返回 null
  */
-export async function readCursorCookie(): Promise<string | null> {
+function readManualCookie(): string | null {
     const config = vscode.workspace.getConfiguration('cursorCostInfo');
     const cookie = config.get<string>('cookie', '');
 
@@ -36,14 +46,40 @@ export async function readCursorCookie(): Promise<string | null> {
         return cookie.trim();
     }
 
-    return readCursorCookieFromBrowser();
+    return null;
+}
+
+/**
+ * 统一认证解析，按优先级依次尝试：
+ * 1. VS Code 设置中手动配置的 Cookie（用户显式覆盖）
+ * 2. Cursor 本地 SQLite 数据库中的 accessToken（自动登录，零配置）
+ * 3. 浏览器中 cursor.com 的 Cookie
+ * @returns 认证凭据，全部失败则返回 null
+ */
+export async function resolveAuth(): Promise<AuthCredentials | null> {
+    const manualCookie = readManualCookie();
+    if (manualCookie && validateCookie(manualCookie)) {
+        return { type: 'cookie', value: manualCookie };
+    }
+
+    const token = await readCursorAccessToken();
+    if (token) {
+        return { type: 'token', value: token };
+    }
+
+    const browserCookie = await readCursorCookieFromBrowser();
+    if (browserCookie && validateCookie(browserCookie)) {
+        return { type: 'cookie', value: browserCookie };
+    }
+
+    return null;
 }
 
 /**
  * 获取配置说明文本
  */
 export function getConfigHelpText(): string {
-    return '请在 VS Code 设置中配置 cursorCostInfo.cookie，或确保已在浏览器中登录 cursor.com';
+    return '插件将自动读取 Cursor 登录信息。如自动获取失败，请在设置中手动配置 cursorCostInfo.cookie';
 }
 
 /**
@@ -56,8 +92,5 @@ export function validateCookie(cookie: string | null): boolean {
         return false;
     }
 
-    // 简单验证：Cookie 应该包含一些常见的字段
-    // 可以根据实际需要调整验证逻辑
     return cookie.length > 10;
 }
-

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { readCursorCookie, validateCookie, getConfigHelpText } from './config';
-import { fetchUsageSummary, formatUsageDisplay, UsageSummary, calculateTotalUsage, formatCurrency, getUsageColor } from './api';
+import { resolveAuth, getConfigHelpText } from './config';
+import { fetchUsageSummaryAuto, formatUsageDisplay, UsageSummary, calculateTotalUsage, formatCurrency, getUsageColor } from './api';
 
 let statusBarItem: vscode.StatusBarItem;
 let refreshTimer: NodeJS.Timeout | undefined;
@@ -117,21 +117,20 @@ async function updateUsageInfo() {
     statusBarItem.text = '$(sync~spin) 加载中...';
     statusBarItem.show();
 
-    // 读取 Cookie（优先本地配置，否则从浏览器 cursor.com cookie 读取）
-    const cookie = await readCursorCookie();
+    // 解析认证信息（自动登录 Token > 手动 Cookie > 浏览器 Cookie）
+    const auth = await resolveAuth();
 
-    if (!cookie || !validateCookie(cookie)) {
-      statusBarItem.text = '$(warning) Cursor: 未配置 Cookie';
+    if (!auth) {
+      statusBarItem.text = '$(warning) Cursor: 未找到认证信息';
       statusBarItem.tooltip = getConfigHelpText();
-      statusBarItem.color = undefined; // 使用默认颜色
+      statusBarItem.color = undefined;
       statusBarItem.backgroundColor = undefined;
       statusBarItem.show();
 
-      // 更新 WebView 显示错误
       updateWebView(null, null);
 
       vscode.window.showWarningMessage(
-        '请在 VS Code 设置中配置 cursorCostInfo.cookie',
+        '未找到 Cursor 认证信息，请确保已登录 Cursor，或手动配置 Cookie',
         '打开设置'
       ).then((selection) => {
         if (selection === '打开设置') {
@@ -141,8 +140,8 @@ async function updateUsageInfo() {
       return;
     }
 
-    // 调用 API
-    const summary = await fetchUsageSummary(cookie);
+    // 根据认证类型自动选择 API 端点
+    const summary = await fetchUsageSummaryAuto(auth);
 
     // 获取配置
     const config = vscode.workspace.getConfiguration('cursorCostInfo');
@@ -169,7 +168,6 @@ async function updateUsageInfo() {
     } else if (total.percentage >= 80) {
       statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
     } else {
-      // 清除背景色，使用默认
       statusBarItem.backgroundColor = undefined;
     }
 
@@ -187,11 +185,10 @@ async function updateUsageInfo() {
 
     statusBarItem.text = '$(error) Cursor: 获取失败';
     statusBarItem.tooltip = `错误: ${error instanceof Error ? error.message : '未知错误'}`;
-    statusBarItem.color = '#F48771'; // 错误时使用红色
+    statusBarItem.color = '#F48771';
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     statusBarItem.show();
 
-    // 更新 WebView 显示错误
     updateWebView(null, null, error instanceof Error ? error.message : '未知错误');
 
     vscode.window.showErrorMessage(
@@ -466,17 +463,39 @@ function getUsageWebViewHtml(summary: UsageSummary, total: any, customOnDemandLi
         </div>
     </div>
 
+    ${plan.autoSpend !== undefined || plan.apiSpend !== undefined ? `
     <div class="section">
         <div class="section-title">💸 花费明细</div>
+        ${plan.autoSpend !== undefined ? `
         <div class="detail-row">
             <span class="detail-label">自动花费</span>
             <span class="detail-value">${formatCurrency((plan.autoSpend / 100.0))}</span>
-        </div>
+        </div>` : ''}
+        ${plan.apiSpend !== undefined ? `
         <div class="detail-row">
             <span class="detail-label">API 花费</span>
             <span class="detail-value">${formatCurrency((plan.apiSpend / 100.0))}</span>
-        </div>
-    </div>
+        </div>` : ''}
+    </div>` : ''}
+    ${plan.autoPercentUsed !== undefined || plan.apiPercentUsed !== undefined ? `
+    <div class="section">
+        <div class="section-title">📊 使用率明细</div>
+        ${plan.autoPercentUsed !== undefined ? `
+        <div class="detail-row">
+            <span class="detail-label">自动模型使用率</span>
+            <span class="detail-value">${plan.autoPercentUsed.toFixed(1)}%</span>
+        </div>` : ''}
+        ${plan.apiPercentUsed !== undefined ? `
+        <div class="detail-row">
+            <span class="detail-label">API 使用率</span>
+            <span class="detail-value">${plan.apiPercentUsed.toFixed(1)}%</span>
+        </div>` : ''}
+        ${plan.totalPercentUsed !== undefined ? `
+        <div class="detail-row">
+            <span class="detail-label">总使用率</span>
+            <span class="detail-value">${plan.totalPercentUsed.toFixed(1)}%</span>
+        </div>` : ''}
+    </div>` : ''}
 
     <div class="section">
         <div class="section-title">📅 计费周期</div>
@@ -548,8 +567,8 @@ function getNoConfigWebViewHtml(): string {
 <body>
     <div class="warning">
         <div class="warning-icon">⚠️</div>
-        <div class="warning-text">未配置 Cursor Cookie</div>
-        <p>请在 VS Code 设置中配置 <code>cursorCostInfo.cookie</code></p>
+        <div class="warning-text">未找到 Cursor 认证信息</div>
+        <p>请确保已登录 Cursor，或在设置中手动配置 <code>cursorCostInfo.cookie</code></p>
         <button class="config-btn" onclick="openSettings()">打开设置</button>
     </div>
     <script>
@@ -655,9 +674,12 @@ function getDetailedTooltip(summary: UsageSummary, customOnDemandLimit: number |
     `限额: ${formatCurrency(total.onDemandLimit)}${customOnDemandLimit !== null ? ' (自定义)' : ''}`,
     `剩余: ${formatCurrency(total.onDemandLimit - onDemand.used)}`,
     '',
-    '--- 花费明细 ---',
-    `自动花费: ${formatCurrency(plan.autoSpend)}`,
-    `API 花费: ${formatCurrency(plan.apiSpend)}`,
+    '--- 花费/使用率明细 ---',
+    ...(plan.autoSpend !== undefined ? [`自动花费: ${formatCurrency(plan.autoSpend)}`] : []),
+    ...(plan.apiSpend !== undefined ? [`API 花费: ${formatCurrency(plan.apiSpend)}`] : []),
+    ...(plan.autoPercentUsed !== undefined ? [`自动模型使用率: ${plan.autoPercentUsed.toFixed(1)}%`] : []),
+    ...(plan.apiPercentUsed !== undefined ? [`API 使用率: ${plan.apiPercentUsed.toFixed(1)}%`] : []),
+    ...(plan.totalPercentUsed !== undefined ? [`总使用率: ${plan.totalPercentUsed.toFixed(1)}%`] : []),
     '',
     '--- 使用明细 ---',
     `包含: ${formatCurrency(plan.breakdown.included)}`,

@@ -2,7 +2,7 @@
     "name": "cursor-cost-info",
     "displayName": "Cursor Cost Info",
     "description": "Cursor Cost Info Extension",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "publisher": "zhangzhihua",
     "author": {
         "name": "徐凤年",
@@ -39,7 +39,7 @@
                 "cursorCostInfo.cookie": {
                     "type": "string",
                     "default": "",
-                    "description": "Cursor Cookie 值。从浏览器开发者工具中获取（访问 https://cursor.com/cn/dashboard?tab=usage，F12 -> Network -> usage-summary -> Request Headers -> Cookie）"
+                    "description": "（可选）Cursor Cookie 值。插件会自动读取 Cursor 本地登录信息，通常无需手动配置。如自动获取失败，可从浏览器开发者工具中获取（访问 https://cursor.com/cn/dashboard?tab=usage，F12 -> Network -> usage-summary -> Request Headers -> Cookie）"
                 },
                 "cursorCostInfo.refreshInterval": {
                     "type": "number",

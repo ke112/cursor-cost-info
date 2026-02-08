@@ -1,7 +1,11 @@
 import * as https from 'https';
+import { AuthCredentials } from './config';
 
 /**
  * API 响应数据类型定义
+ * 兼容两种 API 端点的响应格式：
+ * - cursor.com/api/usage-summary（Cookie 认证）
+ * - api2.cursor.sh/auth/usage-summary（Token 认证）
  */
 export interface UsageSummary {
     billingCycleStart: string;
@@ -22,10 +26,13 @@ export interface UsageSummary {
                 bonus: number;
                 total: number;
             };
-            autoSpend: number;
-            apiSpend: number;
-            autoLimit: number;
-            apiLimit: number;
+            autoSpend?: number;
+            apiSpend?: number;
+            autoLimit?: number;
+            apiLimit?: number;
+            autoPercentUsed?: number;
+            apiPercentUsed?: number;
+            totalPercentUsed?: number;
         };
         onDemand: {
             enabled: boolean;
@@ -45,7 +52,87 @@ export interface UsageSummary {
 }
 
 /**
- * 调用 Cursor API 获取使用情况摘要
+ * 根据认证类型自动选择 API 端点获取使用情况摘要
+ * @param auth 认证凭据
+ * @returns 使用情况摘要数据
+ */
+export async function fetchUsageSummaryAuto(auth: AuthCredentials): Promise<UsageSummary> {
+    if (auth.type === 'token') {
+        return fetchUsageSummaryWithToken(auth.value);
+    }
+    return fetchUsageSummary(auth.value);
+}
+
+/**
+ * 使用 Cursor accessToken 调用 api2.cursor.sh 获取使用情况摘要
+ * @param token Cursor 本地存储的 JWT accessToken
+ * @returns 使用情况摘要数据
+ */
+export async function fetchUsageSummaryWithToken(token: string): Promise<UsageSummary> {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'api2.cursor.sh',
+            port: 443,
+            path: '/auth/usage-summary',
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': '*/*',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Cache-Control': 'no-cache'
+            }
+        };
+
+        const req = https.request(options, (res: any) => {
+            let data = '';
+
+            const encoding = res.headers['content-encoding'];
+            let stream: any = res;
+
+            if (encoding === 'gzip' || encoding === 'deflate' || encoding === 'br') {
+                const zlib = require('zlib');
+                if (encoding === 'gzip') {
+                    stream = res.pipe(zlib.createGunzip());
+                } else if (encoding === 'deflate') {
+                    stream = res.pipe(zlib.createInflate());
+                } else if (encoding === 'br') {
+                    stream = res.pipe(zlib.createBrotliDecompress());
+                }
+            }
+
+            stream.on('data', (chunk: any) => {
+                data += chunk;
+            });
+
+            stream.on('end', () => {
+                try {
+                    if (res.statusCode !== 200) {
+                        reject(new Error(
+                            `API 请求失败，状态码: ${res.statusCode}` +
+                            (res.statusCode === 401 ? '（Token 已过期或无效）' : '')
+                        ));
+                        return;
+                    }
+
+                    const json = JSON.parse(data);
+                    resolve(json);
+                } catch (error) {
+                    reject(new Error(`解析响应失败: ${error}`));
+                }
+            });
+        });
+
+        req.on('error', (error: any) => {
+            reject(new Error(`网络请求失败: ${error.message}`));
+        });
+
+        req.end();
+    });
+}
+
+/**
+ * 使用 Cookie 调用 cursor.com API 获取使用情况摘要
  * @param cookie Cookie 字符串
  * @returns 使用情况摘要数据
  */
@@ -75,7 +162,6 @@ export async function fetchUsageSummary(cookie: string): Promise<UsageSummary> {
         const req = https.request(options, (res: any) => {
             let data = '';
 
-            // 处理 gzip 压缩
             const encoding = res.headers['content-encoding'];
             let stream: any = res;
 
@@ -139,10 +225,10 @@ export function formatCurrency(amount: number): string {
  * @returns 总使用情况数据
  */
 export interface TotalUsage {
-    totalUsed: number;      // plan.used + onDemand.used
-    totalLimit: number;     // plan.limit + onDemandLimit
-    totalRemaining: number; // totalLimit - totalUsed
-    percentage: number;     // (totalUsed / totalLimit) * 100
+    totalUsed: number;
+    totalLimit: number;
+    totalRemaining: number;
+    percentage: number;
     planUsed: number;
     planLimit: number;
     onDemandUsed: number;
@@ -153,7 +239,6 @@ export function calculateTotalUsage(summary: UsageSummary, customOnDemandLimit: 
     const plan = summary.individualUsage.plan;
     const onDemand = summary.individualUsage.onDemand;
 
-    // 使用自定义限制或 API 返回的限制
     const onDemandLimit = customOnDemandLimit !== null
         ? customOnDemandLimit
         : (onDemand.limit !== null ? onDemand.limit : 0);
@@ -182,13 +267,13 @@ export function calculateTotalUsage(summary: UsageSummary, customOnDemandLimit: 
  */
 export function getUsageColor(percentage: number): string {
     if (percentage < 50) {
-        return '#4EC9B0'; // 绿色 - 使用率低
+        return '#4EC9B0';
     } else if (percentage < 80) {
-        return '#DCDCAA'; // 黄色 - 使用率中等
+        return '#DCDCAA';
     } else if (percentage < 90) {
-        return '#CE9178'; // 橙色 - 使用率较高
+        return '#CE9178';
     } else {
-        return '#F48771'; // 红色 - 使用率很高
+        return '#F48771';
     }
 }
 
@@ -199,13 +284,13 @@ export function getUsageColor(percentage: number): string {
  */
 export function getUsageIndicator(percentage: number): string {
     if (percentage < 50) {
-        return '🟢'; // 绿色 - 使用率低
+        return '🟢';
     } else if (percentage < 80) {
-        return '🟡'; // 黄色 - 使用率中等
+        return '🟡';
     } else if (percentage < 90) {
-        return '🟠'; // 橙色 - 使用率较高
+        return '🟠';
     } else {
-        return '🔴'; // 红色 - 使用率很高
+        return '🔴';
     }
 }
 
@@ -238,7 +323,6 @@ export function formatUsageDisplay(
     const limitStr = formatCurrency(total.totalLimit);
 
     if (showProgressBar) {
-        // 使用小球指示器代替进度条
         const indicator = getUsageIndicator(total.percentage);
         return `${indicator} ${total.percentage}% | ${usedStr}/${limitStr}`;
     } else {
@@ -258,4 +342,3 @@ export function getShortUsageText(summary: UsageSummary, customOnDemandLimit: nu
     const limitStr = formatCurrency(total.totalLimit);
     return `$(pulse) ${usedStr}/${limitStr}`;
 }
-
