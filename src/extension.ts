@@ -195,7 +195,7 @@ function getDetailedTooltip(summary: UsageSummary): string {
 
     for (const event of currentUsageEvents) {
       const time = formatTimestamp(event.timestamp);
-      const model = formatModelName(event.model).padEnd(30);
+      const model = formatModelName(event.model);
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0);
       const tokens = formatTokenCount(totalTokens).padStart(7);
       const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`;

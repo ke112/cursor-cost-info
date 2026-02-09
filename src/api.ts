@@ -376,7 +376,7 @@ export function formatModelName(model: string): string {
         'composer-1': 'composer',
         'default': 'default'
     };
-    return simplifications[model] || model.substring(0, 12);
+    return simplifications[model] || model.substring(0, 24);
 }
 
 /**
