@@ -1,6 +1,6 @@
 import * as https from 'https';
-import { AuthCredentials } from './config';
 import { extractUserIdFromToken } from './auth';
+import { AuthCredentials } from './config';
 
 /**
  * API 响应数据类型定义
@@ -355,28 +355,6 @@ export function formatTimestamp(timestamp: string): string {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${month}-${day} ${hours}:${minutes}`;
-}
-
-/**
- * 简化模型名称显示
- * @param model 完整模型名称
- * @returns 简化后的模型名称
- */
-export function formatModelName(model: string): string {
-    // 移除常见前缀和后缀，简化显示
-    const simplifications: Record<string, string> = {
-        'claude-4.6-opus-high-thinking': 'opus-4.6',
-        'claude-4.5-opus-high-thinking': 'opus-4.5',
-        'claude-4-opus': 'opus-4',
-        'claude-3.5-sonnet': 'sonnet-3.5',
-        'gpt-5.2-codex-high': 'gpt-5.2-h',
-        'gpt-5.2-codex': 'gpt-5.2',
-        'gpt-4-turbo': 'gpt-4t',
-        'gpt-4o': 'gpt-4o',
-        'composer-1': 'composer',
-        'default': 'default'
-    };
-    return simplifications[model] || model.substring(0, 24);
 }
 
 /**

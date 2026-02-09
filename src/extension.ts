@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatModelName, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, UsageEvent, UsageSummary } from './api';
+import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, UsageEvent, UsageSummary } from './api';
 import { getConfigHelpText, resolveAuth } from './config';
 
 /** 刷新间隔（毫秒） */
@@ -22,9 +22,11 @@ export function activate(context: vscode.ExtensionContext) {
 
   // 创建状态栏项
   statusBarItem = vscode.window.createStatusBarItem(
+    'cursorCostInfo',
     vscode.StatusBarAlignment.Left,
     100
   );
+  statusBarItem.name = 'Cursor Cost';
   statusBarItem.command = 'cursor.costInfo.showDetails';
   statusBarItem.tooltip = '点击在浏览器中打开 Cursor 额度详情';
   context.subscriptions.push(statusBarItem);
@@ -195,7 +197,7 @@ function getDetailedTooltip(summary: UsageSummary): string {
 
     for (const event of currentUsageEvents) {
       const time = formatTimestamp(event.timestamp);
-      const model = formatModelName(event.model);
+      const model = event.model;
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0);
       const tokens = formatTokenCount(totalTokens).padStart(7);
       const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`;
