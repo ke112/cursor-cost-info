@@ -1,5 +1,6 @@
 import * as https from 'https';
 import { AuthCredentials } from './config';
+import { extractUserIdFromToken } from './auth';
 
 /**
  * API 响应数据类型定义
@@ -242,42 +243,64 @@ export async function fetchUsageSummary(cookie: string): Promise<UsageSummary> {
 
 /**
  * 调用 Cursor API 获取使用事件列表
- * @param cookie Cookie 字符串
+ * 支持 Token 认证（从 token 构造 cookie）和直接 Cookie 认证
+ * @param auth 认证凭据
+ * @param billingCycleStart 计费周期开始时间 ISO 字符串
+ * @param billingCycleEnd 计费周期结束时间 ISO 字符串
  * @param limit 获取的记录数量，默认 10
  * @returns 使用事件响应数据
  */
-export async function fetchUsageEvents(cookie: string, limit: number = 10): Promise<UsageEventsResponse> {
-    return new Promise((resolve, reject) => {
-        // 构建请求体 - 尝试不同的参数格式
-        const requestBody = JSON.stringify({});
+export async function fetchUsageEvents(
+    auth: AuthCredentials,
+    billingCycleStart: string,
+    billingCycleEnd: string,
+    limit: number = 10
+): Promise<UsageEventsResponse> {
+    // 构造 Cookie
+    let cookie: string;
+    if (auth.type === 'token') {
+        const userId = extractUserIdFromToken(auth.value);
+        if (!userId) {
+            throw new Error('无法从 Token 中提取用户 ID');
+        }
+        cookie = `WorkosCursorSessionToken=${encodeURIComponent(userId + '::' + auth.value)}`;
+    } else {
+        cookie = auth.value;
+    }
 
+    // 构建请求体
+    const startDate = String(new Date(billingCycleStart).getTime());
+    const endDate = String(Date.now());
+    const requestBody = JSON.stringify({
+        startDate,
+        endDate,
+        page: 1,
+        pageSize: limit
+    });
+
+    return new Promise((resolve, reject) => {
         const options = {
             hostname: 'cursor.com',
             port: 443,
             path: '/api/dashboard/get-filtered-usage-events',
             method: 'POST',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:145.0) Gecko/20100101 Firefox/145.0',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
                 'Accept': '*/*',
-                'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Content-Type': 'application/json',
                 'Content-Length': Buffer.byteLength(requestBody),
+                'Origin': 'https://cursor.com',
                 'Referer': 'https://cursor.com/cn/dashboard?tab=usage',
                 'Cookie': cookie,
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
                 'Connection': 'keep-alive',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
+                'Cache-Control': 'no-cache'
             }
         };
 
         const req = https.request(options, (res: any) => {
             let data = '';
 
-            // 处理 gzip 压缩
             const encoding = res.headers['content-encoding'];
             let stream: any = res;
 
@@ -298,33 +321,23 @@ export async function fetchUsageEvents(cookie: string, limit: number = 10): Prom
 
             stream.on('end', () => {
                 try {
-                    console.log('使用事件 API 状态码:', res.statusCode);
                     if (res.statusCode !== 200) {
-                        console.log('使用事件 API 响应内容:', data);
-                        reject(new Error(`API 请求失败，状态码: ${res.statusCode}`));
+                        reject(new Error(`使用事件 API 请求失败，状态码: ${res.statusCode}`));
                         return;
                     }
 
                     const json = JSON.parse(data);
-                    console.log('使用事件 API 返回记录数:', json.usageEventsDisplay?.length || 0);
-                    // 只返回前 limit 条记录
-                    if (json.usageEventsDisplay && json.usageEventsDisplay.length > limit) {
-                        json.usageEventsDisplay = json.usageEventsDisplay.slice(0, limit);
-                    }
                     resolve(json);
                 } catch (error) {
-                    console.log('使用事件 API 解析失败，原始数据:', data);
-                    reject(new Error(`解析响应失败: ${error}`));
+                    reject(new Error(`解析使用事件响应失败: ${error}`));
                 }
             });
         });
 
         req.on('error', (error: any) => {
-            console.log('使用事件 API 网络错误:', error.message);
-            reject(new Error(`网络请求失败: ${error.message}`));
+            reject(new Error(`使用事件网络请求失败: ${error.message}`));
         });
 
-        // 发送请求体
         req.write(requestBody);
         req.end();
     });
@@ -352,6 +365,7 @@ export function formatTimestamp(timestamp: string): string {
 export function formatModelName(model: string): string {
     // 移除常见前缀和后缀，简化显示
     const simplifications: Record<string, string> = {
+        'claude-4.6-opus-high-thinking': 'opus-4.6',
         'claude-4.5-opus-high-thinking': 'opus-4.5',
         'claude-4-opus': 'opus-4',
         'claude-3.5-sonnet': 'sonnet-3.5',

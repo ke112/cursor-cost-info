@@ -77,6 +77,32 @@ function querySqlite(dbPath: string, query: string): Promise<string> {
  * globalStorage/state.vscdb 的 ItemTable 表中
  * @returns accessToken 字符串，读取失败或未登录则返回 null
  */
+/**
+ * 从 JWT token 中提取 WorkOS user_id
+ * JWT sub 格式为 "auth0|user_01XXXX"，提取 "|" 后面的部分
+ * @param token JWT accessToken
+ * @returns user_id 字符串，解析失败返回 null
+ */
+export function extractUserIdFromToken(token: string): string | null {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            return null;
+        }
+        const payload = JSON.parse(
+            Buffer.from(parts[1], 'base64url').toString('utf-8')
+        );
+        const sub = payload.sub as string;
+        if (!sub) {
+            return null;
+        }
+        const pipeIndex = sub.indexOf('|');
+        return pipeIndex >= 0 ? sub.substring(pipeIndex + 1) : sub;
+    } catch {
+        return null;
+    }
+}
+
 export async function readCursorAccessToken(): Promise<string | null> {
     try {
         const dbPath = getCursorStoragePath();

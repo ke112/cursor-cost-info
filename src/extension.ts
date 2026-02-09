@@ -99,16 +99,19 @@ async function updateUsageInfo() {
 
     const summary = await fetchUsageSummaryAuto(auth);
 
-    // 获取使用事件（仅 Cookie 认证时支持）
-    if (auth.type === 'cookie') {
-      try {
-        const usageEventsResponse = await fetchUsageEvents(auth.value, 10);
-        if (usageEventsResponse && usageEventsResponse.usageEventsDisplay) {
-          currentUsageEvents = usageEventsResponse.usageEventsDisplay;
-        }
-      } catch (err) {
-        console.error('获取使用事件失败:', err);
+    // 获取使用事件
+    try {
+      const usageEventsResponse = await fetchUsageEvents(
+        auth,
+        summary.billingCycleStart,
+        summary.billingCycleEnd,
+        10
+      );
+      if (usageEventsResponse && usageEventsResponse.usageEventsDisplay) {
+        currentUsageEvents = usageEventsResponse.usageEventsDisplay;
       }
+    } catch (err) {
+      console.error('获取使用事件失败:', err);
     }
 
     currentSummary = summary;
@@ -187,16 +190,16 @@ function getDetailedTooltip(summary: UsageSummary): string {
   if (currentUsageEvents && currentUsageEvents.length > 0) {
     lines.push('');
     lines.push('--- 最近使用记录 ---');
-    lines.push('时间       | 模型        | Token   | 花费');
-    lines.push('─'.repeat(45));
+    lines.push('时间                   |  Token      |  花费       |  模型');
+    lines.push('─'.repeat(30));
 
     for (const event of currentUsageEvents) {
       const time = formatTimestamp(event.timestamp);
-      const model = formatModelName(event.model).padEnd(11);
+      const model = formatModelName(event.model).padEnd(30);
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0);
       const tokens = formatTokenCount(totalTokens).padStart(7);
       const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`;
-      lines.push(`${time} | ${model} | ${tokens} | ${cost}`);
+      lines.push(`${time}      | ${tokens}      | ${cost}      | ${model}`);
     }
   }
 
