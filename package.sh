@@ -256,22 +256,60 @@ install_extension() {
     
     if [ $install_exit_code -eq 0 ]; then
         log_success "$editor 插件安装成功！"
-        if [ "$editor_running" = true ]; then
-            log_warning "请重启 $editor 以使插件生效"
-        fi
         return 0
     else
         # 检查是否是覆盖安装的情况（某些情况下会返回非零但实际成功）
         if echo "$install_output" | grep -qi "already installed\|已安装\|installed"; then
             log_success "$editor 插件已是最新版本或安装成功"
-            if [ "$editor_running" = true ]; then
-                log_warning "请重启 $editor 以使插件生效"
-            fi
             return 0
         else
             log_error "$editor 插件安装失败: $install_output"
             return 1
         fi
+    fi
+}
+
+# 函数: 重载编辑器窗口（让插件生效，无需完全重启）
+reload_editor() {
+    local editor_name=$1
+    local editor_path=$2
+
+    log_info "正在重载 $editor_name 窗口..."
+
+    # 获取编辑器的 app 名称（用于 AppleScript）
+    local app_name
+    case $editor_name in
+        "VSCode")  app_name="Visual Studio Code" ;;
+        "Cursor")  app_name="Cursor" ;;
+        "Trae")    app_name="Trae" ;;
+        *)         app_name="$editor_name" ;;
+    esac
+
+    # 使用 AppleScript 发送 Reload Window 命令（macOS）
+    if [ "$(uname)" = "Darwin" ]; then
+        osascript -e "
+            tell application \"$app_name\"
+                activate
+            end tell
+            delay 0.3
+            tell application \"System Events\"
+                tell process \"$app_name\"
+                    keystroke \"p\" using {command down, shift down}
+                    delay 0.5
+                    keystroke \"Reload Window\"
+                    delay 0.3
+                    key code 36
+                end tell
+            end tell
+        " >/dev/null 2>&1
+
+        if [ $? -eq 0 ]; then
+            log_success "$editor_name 窗口已发送重载指令"
+        else
+            log_warning "$editor_name 自动重载失败，请手动执行: Cmd+Shift+P → Reload Window"
+        fi
+    else
+        log_warning "自动重载仅支持 macOS，请手动重启 $editor_name"
     fi
 }
 
@@ -449,8 +487,22 @@ main() {
     echo "========================================"
     log_success "插件部署完成！"
     echo "成功安装: $success_count/$total_count 个编辑器"
+
     if [ $success_count -gt 0 ]; then
-        log_warning "请重启已安装插件的编辑器以使更改生效"
+        # 收集正在运行的已安装编辑器，尝试自动 reload
+        local reloaded=false
+        for i in "${!editor_names[@]}"; do
+            local editor_name="${editor_names[i]}"
+            local editor_path="${editor_paths[i]}"
+            if [ -f "$editor_path" ] && check_editor_running "$editor_name"; then
+                reload_editor "$editor_name" "$editor_path"
+                reloaded=true
+            fi
+        done
+
+        if [ "$reloaded" = false ]; then
+            log_info "没有检测到正在运行的编辑器需要重载"
+        fi
     fi
     echo "========================================"
 }
