@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-<<<<<<< Updated upstream
 import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, UsageEvent, UsageSummary } from './api';
 import { getConfigHelpText, resolveAuth } from './config';
 
@@ -8,10 +7,6 @@ const REFRESH_INTERVAL = 30000;
 
 /** 通知阈值百分比列表 */
 const NOTIFICATION_THRESHOLDS = [80, 85, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100];
-=======
-import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatModelName, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, UsageEvent, UsageSummary } from './api';
-import { getConfigHelpText, resolveAuth } from './config';
->>>>>>> Stashed changes
 
 let statusBarItem: vscode.StatusBarItem;
 let refreshTimer: NodeJS.Timeout | undefined;
@@ -231,11 +226,7 @@ function checkAndSendNotification(percentage: number, totalUsed: number, totalLi
   }
 
   if (highestThreshold !== null) {
-<<<<<<< Updated upstream
-    sendNotification(percentage, totalUsed, totalLimit);
-=======
     // sendNotification(percentage, highestThreshold, totalUsed, totalLimit);
->>>>>>> Stashed changes
     lastNotificationPercentage = percentage;
   }
 }
