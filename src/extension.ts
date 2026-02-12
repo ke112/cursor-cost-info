@@ -218,7 +218,7 @@ function extractPercentage(message: string): string | null {
 /**
  * 生成详细的工具提示信息
  */
-function getDetailedTooltip(summary: UsageSummary): string {
+function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
   const plan = summary.individualUsage.plan;
   const onDemand = summary.individualUsage.onDemand;
   const teamOnDemand = summary.teamUsage?.onDemand ?? { used: 0, limit: null, remaining: null };
@@ -229,7 +229,7 @@ function getDetailedTooltip(summary: UsageSummary): string {
 
   const lines: string[] = [];
 
-  lines.push('--- Cursor 使用情况 ---');
+  lines.push('**--- Cursor 使用情况 ---**');
 
   // ── 周期重置倒计时 ──
   const countdown = formatCountdown(summary.billingCycleEnd);
@@ -254,10 +254,10 @@ function getDetailedTooltip(summary: UsageSummary): string {
   // 这个用量已经展示在 本周期已用: 这里了
   // lines.push(`  ├ Included 用量: ${formatCurrency(plan.used)} / ${formatCurrency(plan.limit)}`);
   if (onDemand.enabled) {
-    lines.push(`  └ On-Demand 用量: ${formatCurrency(onDemand.used)} 剩余: ${formatCurrency(COMPANY_ON_DEMAND_LIMIT_CENTS - onDemand.used)}`);
+    lines.push(`└ On-Demand 用量: ${formatCurrency(onDemand.used)} 剩余: ${formatCurrency(COMPANY_ON_DEMAND_LIMIT_CENTS - onDemand.used)}`);
     if (COMPANY_ON_DEMAND_LIMIT_CENTS - onDemand.used < 0) {
       lines.push(`🚨 警告: On-Demand 已超出公司限额 ${formatCurrency(COMPANY_ON_DEMAND_LIMIT_CENTS)}！`);
-      lines.push(`   超出 ${formatCurrency(onDemand.used - COMPANY_ON_DEMAND_LIMIT_CENTS)} 将从工资扣除！`);
+      lines.push(`超出 ${formatCurrency(onDemand.used - COMPANY_ON_DEMAND_LIMIT_CENTS)} 将从工资扣除！`);
     }
   }
 
@@ -268,11 +268,11 @@ function getDetailedTooltip(summary: UsageSummary): string {
     if (onDemand.used >= COMPANY_ON_DEMAND_LIMIT_CENTS) {
       const overAmount = onDemand.used - COMPANY_ON_DEMAND_LIMIT_CENTS;
       lines.push(`🚨 警告: On-Demand 已超出公司限额 ${companyLimitStr}！`);
-      lines.push(`   超出 ${formatCurrency(overAmount)} 将从工资扣除！`);
+      lines.push(`超出 ${formatCurrency(overAmount)} 将从工资扣除！`);
     } else {
       const remaining = COMPANY_ON_DEMAND_LIMIT_CENTS - onDemand.used;
       lines.push(`⚠️ 提醒: 已进入 On-Demand 计费区间`);
-      lines.push(`   公司 On-Demand 额度剩余: ${formatCurrency(remaining)} / ${companyLimitStr}`);
+      lines.push(`公司 On-Demand 额度剩余: ${formatCurrency(remaining)} / ${companyLimitStr}`);
     }
   }
 
@@ -281,29 +281,62 @@ function getDetailedTooltip(summary: UsageSummary): string {
     lines.push(`👥 团队 On-Demand: ${formatCurrency(teamOnDemand.used)}`);
   }
 
-  // ── 最近使用记录 ──
+  // ── 最近使用记录（使用代码块保持等宽对齐）──
   if (currentUsageEvents && currentUsageEvents.length > 0) {
     lines.push('');
-    lines.push('--- 最近使用记录 ---');
-    lines.push('时间           | Token   | 花费    | 类型      | 模型');
-    lines.push('─'.repeat(35));
+    lines.push('**--- 最近使用记录 ---**');
+
+    // 列宽定义: Time=11, Token=7, Cost=8, Type=9, Model=变长
+    const COL = { time: 11, token: 7, cost: 8, type: 9 };
+    const tableLines: string[] = [];
+
+    const header = [
+      'Time'.padEnd(COL.time),
+      'Token'.padStart(COL.token),
+      'Cost'.padStart(COL.cost),
+      'Type'.padEnd(COL.type),
+      'Model',
+    ].join(' | ');
+    tableLines.push(header);
+    tableLines.push('-'.repeat(header.length));
 
     for (const event of currentUsageEvents) {
-      const time = formatTimestamp(event.timestamp);
-      const model = event.model;
+      const time = formatTimestamp(event.timestamp).padEnd(COL.time);
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0);
-      const tokens = formatTokenCount(totalTokens).padStart(7);
-      const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(4)}`;
+      const tokens = formatTokenCount(totalTokens).padStart(COL.token);
+      const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`.padStart(COL.cost);
       // 判断计费类型：isChargeable 且不在 plan 内的为 On-Demand
-      const chargeType = event.isChargeable ? 'On-Demand' : 'Included';
-      lines.push(`${time} | ${tokens} | ${cost.padStart(7)} | ${chargeType.padEnd(9)} | ${model}`);
+      const chargeType = (event.isChargeable ? 'On-Demand' : 'Included').padEnd(COL.type);
+      tableLines.push(`${time} | ${tokens} | ${cost} | ${chargeType} | ${event.model}`);
     }
+
+    // 用代码块包裹表格，确保等宽字体 + 空格不被压缩
+    lines.push('```');
+    lines.push(...tableLines);
+    lines.push('```');
   }
 
   lines.push('');
   lines.push('💡 点击在浏览器中打开完整详情');
 
-  return lines.join('\n');
+  // Markdown 中单个 \n 不换行，需要行尾加两个空格实现硬换行
+  // 空行和代码块内的行不需要处理
+  let inCodeBlock = false;
+  const mdText = lines.map(line => {
+    if (line.startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      return line;
+    }
+    // 代码块内不处理，空行不处理
+    if (inCodeBlock || line === '') {
+      return line;
+    }
+    return line + '  '; // 行尾两个空格 = Markdown 硬换行
+  }).join('\n');
+
+  const md = new vscode.MarkdownString(mdText);
+  md.isTrusted = true;
+  return md;
 }
 
 /**
