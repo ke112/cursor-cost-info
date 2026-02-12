@@ -286,28 +286,29 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
     lines.push('');
     lines.push('**--- 最近使用记录 ---**');
 
-    // 列宽定义: Time=11, Token=7, Cost=8, Type=9, Model=变长
-    const COL = { time: 11, token: 7, cost: 8, type: 9 };
+    // 列宽定义: Time=11, Type=9, Model=24, Token=8, Cost=8
+    const COL = { time: 11, type: 9, model: 24, token: 8, cost: 8 };
     const tableLines: string[] = [];
 
     const header = [
       'Time'.padEnd(COL.time),
+      'Type'.padEnd(COL.type),
+      'Model'.padEnd(COL.model),
       'Token'.padStart(COL.token),
       'Cost'.padStart(COL.cost),
-      'Type'.padEnd(COL.type),
-      'Model',
     ].join(' | ');
     tableLines.push(header);
     tableLines.push('-'.repeat(header.length));
 
     for (const event of currentUsageEvents) {
       const time = formatTimestamp(event.timestamp).padEnd(COL.time);
+      // 判断计费类型：kind 为 usage_based 的为 On-Demand
+      const chargeType = (event.kind === USAGE_EVENT_KIND_USAGE_BASED ? 'On-Demand' : 'Included').padEnd(COL.type);
+      const model = event.model.padEnd(COL.model);
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0) + (event.tokenUsage.cacheWriteTokens || 0) + (event.tokenUsage.cacheReadTokens || 0);
       const tokens = formatTokenCount(totalTokens).padStart(COL.token);
       const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`.padStart(COL.cost);
-      // 判断计费类型：kind 为 usage_based 的为 On-Demand
-      const chargeType = (event.kind === USAGE_EVENT_KIND_USAGE_BASED ? 'On-Demand' : 'Included').padEnd(COL.type);
-      tableLines.push(`${time} | ${tokens} | ${cost} | ${chargeType} | ${event.model}`);
+      tableLines.push(`${time} | ${chargeType} | ${model} | ${tokens} | ${cost}`);
     }
 
     // 用代码块包裹表格，确保等宽字体 + 空格不被压缩
