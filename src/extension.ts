@@ -286,15 +286,49 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
     lines.push('');
     lines.push('**--- 最近使用记录 ---**');
 
-    // 列宽定义: Time=11, Type=9, Model=24, Token=8, Cost=8
-    const COL = { time: 11, type: 9, model: 24, token: 8, cost: 8 };
+    // 列宽定义: Time=11, Type=9, Model=24, Tokens=9, Cost=8
+    const COL = { time: 11, type: 9, model: 24, token: 9, cost: 8 };
     const tableLines: string[] = [];
+
+    // 计算字符串的显示宽度（中文/全角字符占2个宽度）
+    const displayWidth = (str: string): number => {
+      let width = 0;
+      for (const ch of str) {
+        const code = ch.codePointAt(0) || 0;
+        // CJK 统一汉字、全角字符等占 2 个宽度
+        if (
+          (code >= 0x4E00 && code <= 0x9FFF) ||   // CJK 统一汉字
+          (code >= 0x3400 && code <= 0x4DBF) ||   // CJK 扩展 A
+          (code >= 0xFF01 && code <= 0xFF60) ||   // 全角 ASCII
+          (code >= 0x3000 && code <= 0x303F)      // CJK 标点
+        ) {
+          width += 2;
+        } else {
+          width += 1;
+        }
+      }
+      return width;
+    };
+
+    // 按显示宽度右对齐
+    const padStartDisplay = (str: string, targetWidth: number): string => {
+      const currentWidth = displayWidth(str);
+      const padding = Math.max(0, targetWidth - currentWidth);
+      return ' '.repeat(padding) + str;
+    };
+
+    // 按显示宽度左对齐
+    const padEndDisplay = (str: string, targetWidth: number): string => {
+      const currentWidth = displayWidth(str);
+      const padding = Math.max(0, targetWidth - currentWidth);
+      return str + ' '.repeat(padding);
+    };
 
     const header = [
       'Time'.padEnd(COL.time),
       'Type'.padEnd(COL.type),
       'Model'.padEnd(COL.model),
-      'Token'.padStart(COL.token),
+      padStartDisplay('Tokens', COL.token),
       'Cost'.padStart(COL.cost),
     ].join(' | ');
     tableLines.push(header);
@@ -304,9 +338,9 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
       const time = formatTimestamp(event.timestamp).padEnd(COL.time);
       // 判断计费类型：kind 为 usage_based 的为 On-Demand
       const chargeType = (event.kind === USAGE_EVENT_KIND_USAGE_BASED ? 'On-Demand' : 'Included').padEnd(COL.type);
-      const model = event.model.padEnd(COL.model);
+      const model = padEndDisplay(event.model, COL.model);
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0) + (event.tokenUsage.cacheWriteTokens || 0) + (event.tokenUsage.cacheReadTokens || 0);
-      const tokens = formatTokenCount(totalTokens).padStart(COL.token);
+      const tokens = padStartDisplay(formatTokenCount(totalTokens), COL.token);
       const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`.padStart(COL.cost);
       tableLines.push(`${time} | ${chargeType} | ${model} | ${tokens} | ${cost}`);
     }
