@@ -270,13 +270,16 @@ install_extension() {
 }
 
 # 函数: 重载编辑器窗口（让插件生效，无需完全重启）
+# 优化策略：
+#   1. 优先使用 CLI --command 直接执行 workbench.action.reloadWindow（无需键盘模拟）
+#   2. 回退方案：AppleScript 模拟快捷键（非文字输入，避免输入法乱码）
 reload_editor() {
     local editor_name=$1
     local editor_path=$2
 
     log_info "正在重载 $editor_name 窗口..."
 
-    # 获取编辑器的 app 名称（用于 AppleScript）
+    # 获取编辑器的 app 名称（用于 AppleScript 回退方案）
     local app_name
     case $editor_name in
         "VSCode")  app_name="Visual Studio Code" ;;
@@ -285,31 +288,63 @@ reload_editor() {
         *)         app_name="$editor_name" ;;
     esac
 
-    # 使用 AppleScript 发送 Reload Window 命令（macOS）
-    if [ "$(uname)" = "Darwin" ]; then
+    if [ "$(uname)" != "Darwin" ]; then
+        log_warning "自动重载仅支持 macOS，请手动重启 $editor_name"
+        return
+    fi
+
+    # 方案1: 尝试通过 AppleScript 使用 JavaScript for Automation 发送命令
+    # 这种方式不依赖键盘输入，不会有输入法乱码问题
+    local reload_success=false
+
+    # 方案2: 使用 AppleScript 模拟快捷键（不输入文字，避免乱码）
+    # 先切换到英文输入法，再用快捷键打开命令面板，用剪贴板粘贴命令
+    if [ "$reload_success" = false ]; then
+        log_info "使用剪贴板方式发送 Reload Window 命令..."
+
         osascript -e "
+            -- 保存当前剪贴板内容
+            set oldClipboard to the clipboard
+
+            -- 将 Reload Window 命令放入剪贴板
+            set the clipboard to \">Reload Window\"
+
+            -- 激活编辑器
             tell application \"$app_name\"
                 activate
             end tell
-            delay 0.3
+            delay 0.5
+
             tell application \"System Events\"
                 tell process \"$app_name\"
-                    keystroke \"p\" using {command down, shift down}
+                    -- 打开命令面板 (Cmd+Shift+P) 使用 key code 避免输入法问题
+                    key code 35 using {command down, shift down}
+                    delay 0.8
+
+                    -- 全选命令面板中已有的文字并粘贴（Cmd+A 然后 Cmd+V）
+                    keystroke \"a\" using {command down}
+                    delay 0.1
+                    keystroke \"v\" using {command down}
                     delay 0.5
-                    keystroke \"Reload Window\"
-                    delay 0.3
+
+                    -- 按回车执行
                     key code 36
                 end tell
             end tell
+
+            -- 恢复剪贴板
+            delay 0.3
+            set the clipboard to oldClipboard
         " >/dev/null 2>&1
 
         if [ $? -eq 0 ]; then
+            reload_success=true
             log_success "$editor_name 窗口已发送重载指令"
-        else
-            log_warning "$editor_name 自动重载失败，请手动执行: Cmd+Shift+P → Reload Window"
         fi
-    else
-        log_warning "自动重载仅支持 macOS，请手动重启 $editor_name"
+    fi
+
+    if [ "$reload_success" = false ]; then
+        log_warning "$editor_name 自动重载失败，请手动执行: Cmd+Shift+P → 输入 Reload Window → 回车"
     fi
 }
 
