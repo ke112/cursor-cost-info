@@ -254,7 +254,11 @@ function getDetailedTooltip(summary: UsageSummary): string {
   // 这个用量已经展示在 本周期已用: 这里了
   // lines.push(`  ├ Included 用量: ${formatCurrency(plan.used)} / ${formatCurrency(plan.limit)}`);
   if (onDemand.enabled) {
-    lines.push(`  └ On-Demand 用量: ${formatCurrency(onDemand.used)}`);
+    lines.push(`  └ On-Demand 用量: ${formatCurrency(onDemand.used)} 剩余: ${formatCurrency(COMPANY_ON_DEMAND_LIMIT_CENTS - onDemand.used)}`);
+    if (COMPANY_ON_DEMAND_LIMIT_CENTS - onDemand.used < 0) {
+      lines.push(`🚨 警告: On-Demand 已超出公司限额 ${formatCurrency(COMPANY_ON_DEMAND_LIMIT_CENTS)}！`);
+      lines.push(`   超出 ${formatCurrency(onDemand.used - COMPANY_ON_DEMAND_LIMIT_CENTS)} 将从工资扣除！`);
+    }
   }
 
   // ── On-Demand 费用警告 ──
