@@ -2,6 +2,9 @@ import * as https from 'https';
 import { extractUserIdFromToken } from './auth';
 import { AuthCredentials } from './config';
 
+/** Usage event kind: 按量计费 */
+export const USAGE_EVENT_KIND_USAGE_BASED = 'usage_based';
+
 /**
  * API 响应数据类型定义
  * 兼容两种 API 端点的响应格式：

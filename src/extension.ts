@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, UsageEvent, UsageSummary } from './api';
+import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, USAGE_EVENT_KIND_USAGE_BASED, UsageEvent, UsageSummary } from './api';
 import { getConfigHelpText, resolveAuth } from './config';
 
 /** 刷新间隔（毫秒） */
@@ -305,8 +305,8 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0);
       const tokens = formatTokenCount(totalTokens).padStart(COL.token);
       const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`.padStart(COL.cost);
-      // 判断计费类型：isChargeable 且不在 plan 内的为 On-Demand
-      const chargeType = (event.isChargeable ? 'On-Demand' : 'Included').padEnd(COL.type);
+      // 判断计费类型：kind 为 usage_based 的为 On-Demand
+      const chargeType = (event.kind === USAGE_EVENT_KIND_USAGE_BASED ? 'On-Demand' : 'Included').padEnd(COL.type);
       tableLines.push(`${time} | ${tokens} | ${cost} | ${chargeType} | ${event.model}`);
     }
 
