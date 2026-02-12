@@ -302,7 +302,7 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
 
     for (const event of currentUsageEvents) {
       const time = formatTimestamp(event.timestamp).padEnd(COL.time);
-      const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0);
+      const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0) + (event.tokenUsage.cacheWriteTokens || 0) + (event.tokenUsage.cacheReadTokens || 0);
       const tokens = formatTokenCount(totalTokens).padStart(COL.token);
       const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`.padStart(COL.cost);
       // 判断计费类型：kind 为 usage_based 的为 On-Demand

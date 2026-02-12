@@ -366,10 +366,10 @@ export function formatTimestamp(timestamp: string): string {
  * @returns 格式化后的字符串
  */
 export function formatTokenCount(tokens: number): string {
-    if (tokens >= 1000000) {
-        return `${(tokens / 1000000).toFixed(1)}M`;
-    } else if (tokens >= 1000) {
-        return `${(tokens / 1000).toFixed(1)}K`;
+    if (tokens >= 100000000) {
+        return `${parseFloat((tokens / 100000000).toFixed(1))}亿`;
+    } else if (tokens >= 10000) {
+        return `${parseFloat((tokens / 10000).toFixed(1))}万`;
     }
     return String(tokens);
 }
