@@ -391,7 +391,7 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
       const model = padEndDisplay(modelName, COL.model);
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0) + (event.tokenUsage.cacheWriteTokens || 0) + (event.tokenUsage.cacheReadTokens || 0);
       const tokens = padStartDisplay(formatTokenCount(totalTokens), COL.token);
-      const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`.padStart(COL.cost);
+      const cost = (event.tokenUsage.totalCents == null ? '-' : `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`).padStart(COL.cost);
       tableLines.push(`${time} | ${chargeType} | ${model} | ${tokens} | ${cost}`);
     }
 
