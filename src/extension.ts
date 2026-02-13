@@ -311,15 +311,15 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
 
     if (overAmount > 0) {
       // 已超额：红色醒目警告
-      lines.push(`🔴 On-Demand: <span style="color:#ff4d4f;">${formatCurrency(onDemandUsed)}</span> / 公司限额 ${formatCurrency(companyLimit)}`);
+      lines.push(`🔴 On-Demand已用: <span style="color:#ff4d4f;">${formatCurrency(onDemandUsed)}</span>`);
       lines.push(`└ 🚨 <span style="color:#ff4d4f;">已超出 ${formatCurrency(overAmount)}，超出部分将从工资扣除！</span>`);
     } else if (remaining <= companyLimit * 0.2) {
       // 剩余不足 20%：黄色预警
-      lines.push(`🟡 On-Demand: <span style="color:#e8a838;">${formatCurrency(onDemandUsed)}</span> / 公司限额 ${formatCurrency(companyLimit)}`);
+      lines.push(`🟡 On-Demand已用: <span style="color:#e8a838;">${formatCurrency(onDemandUsed)}</span>`);
       lines.push(`└ ⚠️ 剩余免费额度仅 <span style="color:#e8a838;">${formatCurrency(remaining)}</span>，请注意控制用量`);
     } else {
       // 正常范围
-      lines.push(`🟢 On-Demand: ${formatCurrency(onDemandUsed)} / 公司限额 ${formatCurrency(companyLimit)}`);
+      lines.push(`🟢 On-Demand已用: ${formatCurrency(onDemandUsed)}`);
       lines.push(`└ 剩余免费额度: ${formatCurrency(remaining)}`);
     }
   }
