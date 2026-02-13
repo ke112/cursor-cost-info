@@ -269,81 +269,24 @@ install_extension() {
     fi
 }
 
-# 函数: 重载编辑器窗口（让插件生效，无需完全重启）
-# 优化策略：
-#   1. 优先使用 CLI --command 直接执行 workbench.action.reloadWindow（无需键盘模拟）
-#   2. 回退方案：AppleScript 模拟快捷键（非文字输入，避免输入法乱码）
+# 函数: 触发编辑器窗口自动重载（让插件生效，无需完全重启）
+# 原理：修改 ~/.cursor-cost-info/.reload-trigger 的 mtime，
+#       插件内部通过 fs.watchFile 检测到变化后自动执行 workbench.action.reloadWindow
+# 优势：不依赖键盘模拟、不依赖 URI Scheme、不受窗口焦点/输入法/用户操作影响
 reload_editor() {
     local editor_name=$1
     local editor_path=$2
 
-    log_info "正在重载 $editor_name 窗口..."
+    local trigger_dir="$HOME/.cursor-cost-info"
+    local trigger_file="$trigger_dir/.reload-trigger"
 
-    # 获取编辑器的 app 名称（用于 AppleScript 回退方案）
-    local app_name
-    case $editor_name in
-        "VSCode")  app_name="Visual Studio Code" ;;
-        "Cursor")  app_name="Cursor" ;;
-        "Trae")    app_name="Trae" ;;
-        *)         app_name="$editor_name" ;;
-    esac
+    # 确保目录存在
+    mkdir -p "$trigger_dir" 2>/dev/null
 
-    if [ "$(uname)" != "Darwin" ]; then
-        log_warning "自动重载仅支持 macOS，请手动重启 $editor_name"
-        return
-    fi
-
-    # 方案1: 尝试通过 AppleScript 使用 JavaScript for Automation 发送命令
-    # 这种方式不依赖键盘输入，不会有输入法乱码问题
-    local reload_success=false
-
-    # 方案2: 使用 AppleScript 模拟快捷键（不输入文字，避免乱码）
-    # 先切换到英文输入法，再用快捷键打开命令面板，用剪贴板粘贴命令
-    if [ "$reload_success" = false ]; then
-        log_info "使用剪贴板方式发送 Reload Window 命令..."
-
-        osascript -e "
-            -- 保存当前剪贴板内容
-            set oldClipboard to the clipboard
-
-            -- 将 Reload Window 命令放入剪贴板
-            set the clipboard to \">Reload Window\"
-
-            -- 激活编辑器
-            tell application \"$app_name\"
-                activate
-            end tell
-            delay 0.5
-
-            tell application \"System Events\"
-                tell process \"$app_name\"
-                    -- 打开命令面板 (Cmd+Shift+P) 使用 key code 避免输入法问题
-                    key code 35 using {command down, shift down}
-                    delay 0.8
-
-                    -- 全选命令面板中已有的文字并粘贴（Cmd+A 然后 Cmd+V）
-                    keystroke \"a\" using {command down}
-                    delay 0.1
-                    keystroke \"v\" using {command down}
-                    delay 0.5
-
-                    -- 按回车执行
-                    key code 36
-                end tell
-            end tell
-
-            -- 恢复剪贴板
-            delay 0.3
-            set the clipboard to oldClipboard
-        " >/dev/null 2>&1
-
-        if [ $? -eq 0 ]; then
-            reload_success=true
-            log_success "$editor_name 窗口已发送重载指令"
-        fi
-    fi
-
-    if [ "$reload_success" = false ]; then
+    # touch 修改 mtime，触发插件的 fs.watchFile 回调
+    if touch "$trigger_file" 2>/dev/null; then
+        log_success "$editor_name 已触发自动重载（文件监听机制）"
+    else
         log_warning "$editor_name 自动重载失败，请手动执行: Cmd+Shift+P → 输入 Reload Window → 回车"
     fi
 }

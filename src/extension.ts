@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, USAGE_EVENT_KIND_USAGE_BASED, UsageEvent, UsageSummary } from './api';
 import { getConfigHelpText, resolveAuth } from './config';
@@ -68,6 +71,12 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // ── 自动重载机制 ──
+  // 打包脚本安装新版本后 touch ~/.cursor-cost-info/.reload-trigger
+  // 插件通过 fs.watchFile (polling) 检测到 mtime 变化，自动执行 Reload Window
+  // 优势：不依赖键盘模拟、不依赖 URI Scheme、不受窗口焦点/输入法影响
+  setupAutoReloadWatcher(context);
+
   // 初始加载
   updateUsageInfo();
 
@@ -106,6 +115,48 @@ function stopPolling() {
  */
 export function deactivate() {
   stopPolling();
+}
+
+/**
+ * 设置自动重载文件监听器
+ * 打包脚本安装新版本后 touch ~/.cursor-cost-info/.reload-trigger，
+ * 插件检测到 mtime 变化后自动执行 workbench.action.reloadWindow
+ */
+function setupAutoReloadWatcher(context: vscode.ExtensionContext) {
+  const RELOAD_TRIGGER_DIR = path.join(os.homedir(), '.cursor-cost-info');
+  const RELOAD_TRIGGER_FILE = path.join(RELOAD_TRIGGER_DIR, '.reload-trigger');
+  const POLL_INTERVAL_MS = 2000;
+
+  try {
+    // 确保触发文件目录和文件存在
+    if (!fs.existsSync(RELOAD_TRIGGER_DIR)) {
+      fs.mkdirSync(RELOAD_TRIGGER_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(RELOAD_TRIGGER_FILE)) {
+      fs.writeFileSync(RELOAD_TRIGGER_FILE, '', 'utf-8');
+    }
+
+    // fs.watchFile 基于 stat polling，跨平台最可靠（不依赖 inotify/kqueue/FSEvents）
+    fs.watchFile(RELOAD_TRIGGER_FILE, { interval: POLL_INTERVAL_MS }, (curr, prev) => {
+      // 文件存在（mtimeMs > 0）且 mtime 发生变化时触发重载
+      if (curr.mtimeMs > 0 && curr.mtimeMs !== prev.mtimeMs) {
+        console.log('[Cursor Cost Info] 检测到 .reload-trigger 变化，自动重载窗口...');
+        vscode.commands.executeCommand('workbench.action.reloadWindow');
+      }
+    });
+
+    // 扩展停用时清理 watcher
+    context.subscriptions.push({
+      dispose: () => {
+        fs.unwatchFile(RELOAD_TRIGGER_FILE);
+      }
+    });
+
+    console.log('[Cursor Cost Info] 自动重载监听已启动:', RELOAD_TRIGGER_FILE);
+  } catch (err) {
+    // 非关键功能，失败不影响插件正常使用
+    console.error('[Cursor Cost Info] 自动重载监听设置失败:', err);
+  }
 }
 
 /**
