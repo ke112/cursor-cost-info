@@ -226,7 +226,7 @@ install_extension() {
         
         if [ $uninstall_exit_code -eq 0 ]; then
             log_success "$editor 旧版本卸载成功"
-            sleep 1  # 等待卸载完成
+            # sleep 1  # 等待卸载完成
         else
             # 检查错误信息
             local error_msg=$(echo "$uninstall_output" | tr '\n' ' ')
@@ -404,11 +404,11 @@ main() {
     ensure_cookie_config
     
     # 更新版本号
-    update_version || {
-        log_error "版本更新失败"
-        exit 1
-    }
-    echo ""
+    # update_version || {
+    #     log_error "版本更新失败"
+    #     exit 1
+    # }
+    # echo ""
 
     # 打包插件
     package_extension || {
