@@ -229,7 +229,7 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
 
   const lines: string[] = [];
 
-  lines.push('**--- Cursor 使用情况 ---**');
+  lines.push('<b>--- Cursor 使用情况 ---</b>');
 
   // ── 周期重置倒计时 ──
   const countdown = formatCountdown(summary.billingCycleEnd);
@@ -250,32 +250,29 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
     }
   }
 
-  // ── 用量明细 ──
-  // 这个用量已经展示在 本周期已用: 这里了
-  // lines.push(`  ├ Included 用量: ${formatCurrency(plan.used)} / ${formatCurrency(plan.limit)}`);
+  const onDemandUsed = onDemand.used;
+
+  // ── On-Demand 用量明细 ──
   if (onDemand.enabled) {
-    lines.push(`└ On-Demand 用量: ${formatCurrency(onDemand.used)} 剩余: ${formatCurrency(COMPANY_ON_DEMAND_LIMIT_CENTS - onDemand.used)}`);
-    if (COMPANY_ON_DEMAND_LIMIT_CENTS - onDemand.used < 0) {
-      lines.push(`🚨 警告: On-Demand 已超出公司限额 ${formatCurrency(COMPANY_ON_DEMAND_LIMIT_CENTS)}！`);
-      lines.push(`超出 ${formatCurrency(onDemand.used - COMPANY_ON_DEMAND_LIMIT_CENTS)} 将从工资扣除！`);
-    }
-  }
+    const companyLimit = COMPANY_ON_DEMAND_LIMIT_CENTS;
+    const remaining = companyLimit - onDemandUsed;
+    const overAmount = onDemandUsed - companyLimit;
 
-  // ── On-Demand 费用警告 ──
-  if (onDemand.enabled && onDemand.used > 0) {
-    lines.push('');
-    const companyLimitStr = formatCurrency(COMPANY_ON_DEMAND_LIMIT_CENTS);
-    if (onDemand.used >= COMPANY_ON_DEMAND_LIMIT_CENTS) {
-      const overAmount = onDemand.used - COMPANY_ON_DEMAND_LIMIT_CENTS;
-      lines.push(`🚨 警告: On-Demand 已超出公司限额 ${companyLimitStr}！`);
-      lines.push(`超出 ${formatCurrency(overAmount)} 将从工资扣除！`);
+    if (overAmount > 0) {
+      // 已超额：红色醒目警告
+      lines.push(`🔴 On-Demand: <span style="color:#ff4d4f;">${formatCurrency(onDemandUsed)}</span> / 公司限额 ${formatCurrency(companyLimit)}`);
+      lines.push(`└ 🚨 <span style="color:#ff4d4f;">已超出 ${formatCurrency(overAmount)}，超出部分将从工资扣除！</span>`);
+    } else if (remaining <= companyLimit * 0.2) {
+      // 剩余不足 20%：黄色预警
+      lines.push(`🟡 On-Demand: <span style="color:#e8a838;">${formatCurrency(onDemandUsed)}</span> / 公司限额 ${formatCurrency(companyLimit)}`);
+      lines.push(`└ ⚠️ 剩余免费额度仅 <span style="color:#e8a838;">${formatCurrency(remaining)}</span>，请注意控制用量`);
     } else {
-      const remaining = COMPANY_ON_DEMAND_LIMIT_CENTS - onDemand.used;
-      lines.push(`⚠️ 提醒: 已进入 On-Demand 计费区间`);
-      lines.push(`公司 On-Demand 额度剩余: ${formatCurrency(remaining)} / ${companyLimitStr}`);
+      // 正常范围
+      lines.push(`🟢 On-Demand: ${formatCurrency(onDemandUsed)} / 公司限额 ${formatCurrency(companyLimit)}`);
+      lines.push(`└ 剩余免费额度: ${formatCurrency(remaining)}`);
     }
   }
-
+  
   // ── 团队用量 ──
   if (teamOnDemand.used > 0) {
     lines.push(`👥 团队 On-Demand: ${formatCurrency(teamOnDemand.used)}`);
@@ -284,10 +281,10 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
   // ── 最近使用记录（使用代码块保持等宽对齐）──
   if (currentUsageEvents && currentUsageEvents.length > 0) {
     lines.push('');
-    lines.push('**--- 最近使用记录 ---**');
+    lines.push('<b>--- 最近使用记录 ---</b>');
 
-    // 列宽定义: Time=11, Type=9, Model=24, Tokens=9, Cost=8
-    const COL = { time: 11, type: 9, model: 24, token: 9, cost: 8 };
+    // 列宽定义: Time=11, Type=9, Model=25, Tokens=9, Cost=8
+    const COL = { time: 11, type: 9, model: 25, token: 9, cost: 8 };
     const tableLines: string[] = [];
 
     // 计算字符串的显示宽度（中文/全角字符占2个宽度）
@@ -338,7 +335,9 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
       const time = formatTimestamp(event.timestamp).padEnd(COL.time);
       // 判断计费类型：kind 为 usage_based 的为 On-Demand
       const chargeType = (event.kind === USAGE_EVENT_KIND_USAGE_BASED ? 'On-Demand' : 'Included').padEnd(COL.type);
-      const model = padEndDisplay(event.model, COL.model);
+      // 模型名最多展示 25 个字符，超出截断并加省略号
+      const modelName = event.model.length > 25 ? event.model.slice(0, 24) + '…' : event.model;
+      const model = padEndDisplay(modelName, COL.model);
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0) + (event.tokenUsage.cacheWriteTokens || 0) + (event.tokenUsage.cacheReadTokens || 0);
       const tokens = padStartDisplay(formatTokenCount(totalTokens), COL.token);
       const cost = `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`.padStart(COL.cost);
@@ -354,23 +353,27 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
   lines.push('');
   lines.push('💡 点击在浏览器中打开完整详情');
 
-  // Markdown 中单个 \n 不换行，需要行尾加两个空格实现硬换行
-  // 空行和代码块内的行不需要处理
+  // 统一使用 HTML <br/> 换行，避免 Markdown 行尾双空格与 HTML 标签混用导致颜色失效
   let inCodeBlock = false;
   const mdText = lines.map(line => {
     if (line.startsWith('```')) {
       inCodeBlock = !inCodeBlock;
       return line;
     }
-    // 代码块内不处理，空行不处理
-    if (inCodeBlock || line === '') {
+    // 代码块内保留原始换行
+    if (inCodeBlock) {
       return line;
     }
-    return line + '  '; // 行尾两个空格 = Markdown 硬换行
+    // 空行用 <br/> 产生间距
+    if (line === '') {
+      return '<br/>';
+    }
+    return line + '<br/>';
   }).join('\n');
 
   const md = new vscode.MarkdownString(mdText);
   md.isTrusted = true;
+  md.supportHtml = true;
   return md;
 }
 
