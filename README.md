@@ -2,6 +2,8 @@
 
 一个 VS Code / Cursor 扩展，用于在状态栏实时显示 Cursor API 使用额度信息。**零配置**，自动读取 Cursor 登录凭据，开箱即用。
 
+<img src="images/image1.png" width="300" />
+
 ## 功能特性
 
 - **零配置自动认证**：自动从 Cursor 本地 SQLite 数据库读取 accessToken，无需手动配置 Cookie
@@ -20,45 +22,6 @@
 - **快速查看详情**：点击状态栏直接在浏览器中打开 Cursor Dashboard
 - **手动刷新命令**：通过命令面板手动触发刷新
 - **跨平台支持**：支持 macOS、Linux、Windows
-
-## 安装
-
-### 从源码安装
-
-1. 克隆或下载此项目
-2. 在项目目录下运行：
-   ```bash
-   npm install
-   npm run compile
-   ```
-3. 在 VS Code 中按 `F5` 调试运行，或打包安装：
-   ```bash
-   npm install -g vsce
-   vsce package
-   ```
-4. 安装生成的 `.vsix` 文件
-
-## 认证方式
-
-插件采用**自动认证**，无需手动配置，按以下优先级依次尝试：
-
-### 1. Cursor 本地 Token（推荐，零配置）
-
-插件会自动从 Cursor IDE 本地 SQLite 数据库（`state.vscdb`）中读取 `accessToken`。只要你已登录 Cursor，插件即可直接工作。
-
-数据库路径因操作系统而异：
-
-| 操作系统 | 路径 |
-|---------|------|
-| macOS   | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` |
-| Linux   | `~/.config/Cursor/User/globalStorage/state.vscdb` |
-| Windows | `%APPDATA%/Cursor/User/globalStorage/state.vscdb` |
-
-### 2. 浏览器 Cookie（备用方案）
-
-当本地 Token 不可用时，插件会尝试从浏览器读取 cursor.com 的 Cookie（依赖 `@mherod/get-cookie` 包，支持 Chrome、Firefox、Safari 等）。
-
-> **提示**：绝大多数情况下，只要你已登录 Cursor，插件会自动工作，无需任何配置。
 
 ## 使用方法
 
@@ -138,10 +101,10 @@
 
 插件根据认证方式自动选择对应的 API 端点：
 
-| 认证方式 | API 端点 | 方法 | 用途 |
-|---------|---------|------|------|
-| Token   | `https://api2.cursor.sh/auth/usage-summary` | GET | 获取使用摘要 |
-| Cookie  | `https://cursor.com/api/usage-summary` | GET | 获取使用摘要 |
+| 认证方式     | API 端点                                                     | 方法 | 用途             |
+| ------------ | ------------------------------------------------------------ | ---- | ---------------- |
+| Token        | `https://api2.cursor.sh/auth/usage-summary`                  | GET  | 获取使用摘要     |
+| Cookie       | `https://cursor.com/api/usage-summary`                       | GET  | 获取使用摘要     |
 | Token/Cookie | `https://cursor.com/api/dashboard/get-filtered-usage-events` | POST | 获取使用事件列表 |
 
 > **注意**：使用事件列表接口支持 Token 和 Cookie 两种方式调用。当使用 Token 认证时，插件会自动从 Token 中提取 user_id 构造 Cookie 来调用该接口。
@@ -179,26 +142,10 @@ Cursor 的 accessToken 会定期过期。如果遇到认证失败（状态码 40
 
 ## 命令列表
 
-| 命令 | 说明 |
-|------|------|
+| 命令                       | 说明                            |
+| -------------------------- | ------------------------------- |
 | `Show Cursor Cost Details` | 在浏览器中打开 Cursor Dashboard |
-| `Refresh Cursor Cost Info` | 手动刷新额度信息 |
-
-## 开发
-
-```bash
-# 安装依赖
-npm install
-
-# 编译
-npm run compile
-
-# 监听文件变化
-npm run watch
-
-# 打包
-npm run package
-```
+| `Refresh Cursor Cost Info` | 手动刷新额度信息                |
 
 ## 项目结构
 
