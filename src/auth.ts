@@ -85,22 +85,39 @@ function querySqlite(dbPath: string, query: string): Promise<string> {
  */
 export function extractUserIdFromToken(token: string): string | null {
     try {
-        const parts = token.split('.');
-        if (parts.length !== 3) {
-            return null;
-        }
-        const payload = JSON.parse(
-            Buffer.from(parts[1], 'base64url').toString('utf-8')
-        );
+        const payload = parseJwtPayload(token);
+        if (!payload) { return null; }
         const sub = payload.sub as string;
-        if (!sub) {
-            return null;
-        }
+        if (!sub) { return null; }
         const pipeIndex = sub.indexOf('|');
         return pipeIndex >= 0 ? sub.substring(pipeIndex + 1) : sub;
     } catch {
         return null;
     }
+}
+
+/**
+ * 从 Cursor 本地 SQLite 数据库读取缓存的登录邮箱
+ * @returns 邮箱字符串，读取失败返回 null
+ */
+export async function readCursorCachedEmail(): Promise<string | null> {
+    try {
+        const dbPath = getCursorStoragePath();
+        if (!fs.existsSync(dbPath)) { return null; }
+        const email = await querySqlite(
+            dbPath,
+            "SELECT value FROM ItemTable WHERE key='cursorAuth/cachedEmail';"
+        );
+        return (email && email.trim().length > 0) ? email.trim() : null;
+    } catch {
+        return null;
+    }
+}
+
+function parseJwtPayload(token: string): Record<string, any> | null {
+    const parts = token.split('.');
+    if (parts.length !== 3) { return null; }
+    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
 }
 
 export async function readCursorAccessToken(): Promise<string | null> {

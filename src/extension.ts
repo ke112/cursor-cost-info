@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, USAGE_EVENT_KIND_USAGE_BASED, UsageEvent, UsageSummary } from './api';
+import { readCursorCachedEmail } from './auth';
 import { getConfigHelpText, resolveAuth } from './config';
 
 /** 刷新间隔（毫秒） */
@@ -19,6 +20,7 @@ let refreshTimer: NodeJS.Timeout | undefined;
 let currentSummary: UsageSummary | undefined;
 let lastNotificationPercentage: number | null = null;
 let currentUsageEvents: UsageEvent[] = [];
+let currentEmail: string | null = null;
 let isWindowFocused = true;
 
 /**
@@ -179,6 +181,7 @@ async function updateUsageInfo() {
       return;
     }
 
+    currentEmail = await readCursorCachedEmail();
     const summary = await fetchUsageSummaryAuto(auth);
 
     // 获取使用事件
@@ -227,7 +230,7 @@ async function updateUsageInfo() {
     console.error('更新使用情况失败:', error);
 
     statusBarItem.text = '$(error) Cursor: 获取失败';
-    statusBarItem.tooltip = `错误: ${error instanceof Error ? error.message : '未知错误'}\n\n💡 点击立即重试`;
+    statusBarItem.tooltip = `错误: ${error instanceof Error ? error.message : '未知错误'}\n先查看浏览器中是否登录成功且能正常访问，如正常则点击立即重试\n\n💡 点击立即重试`;
     statusBarItem.command = 'cursor.costInfo.refresh';
     statusBarItem.color = '#F48771';
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
@@ -281,6 +284,11 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
   const lines: string[] = [];
 
   lines.push('<b>--- Cursor 使用情况 ---</b>');
+
+  // ── 当前账号 ──
+  if (currentEmail) {
+    lines.push(`👤 账号: ${currentEmail}`);
+  }
 
   // ── 周期重置倒计时 ──
   const countdown = formatCountdown(summary.billingCycleEnd);
