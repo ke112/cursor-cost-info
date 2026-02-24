@@ -2,12 +2,13 @@
     "name": "cursor-cost-info",
     "displayName": "Cursor Cost Info",
     "description": "Cursor Cost Info Extension",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "publisher": "zhangzhihua",
     "author": {
         "name": "徐凤年",
         "email": "zhangzhihua.email@gmail.com"
     },
+    "icon": "images/logo.jpeg",
     "repository": {
         "type": "git",
         "url": "https://github.com/ke112/cursor-cost-info"
