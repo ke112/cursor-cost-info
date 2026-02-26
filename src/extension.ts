@@ -206,14 +206,17 @@ async function updateUsageInfo() {
     const displayText = formatUsageDisplay(summary, null, true, summary.isUnlimited);
     statusBarItem.text = displayText;
 
+    const autoPercentMatch = summary.autoModelSelectedDisplayMessage?.match(/(\d+)%/);
+    const displayPercent = autoPercentMatch ? parseInt(autoPercentMatch[1], 10) : total.percentage;
+
     if (summary.isUnlimited) {
       statusBarItem.color = getUsageColor(0);
       statusBarItem.backgroundColor = undefined;
     } else {
-      statusBarItem.color = getUsageColor(total.percentage);
-      if (total.percentage >= 90) {
+      statusBarItem.color = getUsageColor(displayPercent);
+      if (displayPercent >= 90) {
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-      } else if (total.percentage >= 80) {
+      } else if (displayPercent >= 80) {
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
       } else {
         statusBarItem.backgroundColor = undefined;
@@ -292,21 +295,20 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
 
   // ── 周期重置倒计时 ──
   const countdown = formatCountdown(summary.billingCycleEnd);
-  lines.push(`📅 距离周期重置: ${countdown}`);
+  lines.push(`📅 距离本周期重置: ${countdown}`);
 
   // ── 本周期已用（合并后的唯一值）──
-  if (summary.isUnlimited) {
-    lines.push(`💰 本周期已用: ${formatCurrency(individualTotalUsed)}`);
-  } else {
-    lines.push(`💰 本周期已用: ${formatCurrency(individualTotalUsed)} / ${formatCurrency(total.totalLimit)} (${total.percentage}%)`);
-  }
+  // autoPercent 来自 API 的 displayMessage，是套餐配额的真实占比，避免用 totalUsed/planLimit 出现超 100% 的异常
+  const autoPercent = summary.autoModelSelectedDisplayMessage
+    ? extractPercentage(summary.autoModelSelectedDisplayMessage)
+    : null;
 
-  // ── 套餐用量百分比（来自 API 的 displayMessage）──
-  if (summary.autoModelSelectedDisplayMessage) {
-    const autoPercent = extractPercentage(summary.autoModelSelectedDisplayMessage);
-    if (autoPercent) {
-      lines.push(`📊 套餐用量占比: ${autoPercent}%`);
-    }
+  if (summary.isUnlimited) {
+    lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)}`);
+  } else if (autoPercent) {
+    lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)} (套餐内已用 ${autoPercent}%)`);
+  } else {
+    lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)} / ${formatCurrency(total.totalLimit)}`);
   }
 
   const onDemandUsed = onDemand.used;
@@ -318,23 +320,17 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
     const overAmount = onDemandUsed - companyLimit;
 
     if (overAmount > 0) {
-      // 已超额：红色醒目警告
-      lines.push(`🔴 On-Demand已用: <span style="color:#ff4d4f;">${formatCurrency(onDemandUsed)}</span>`);
-      lines.push(`└ 🚨 <span style="color:#ff4d4f;">已超出 ${formatCurrency(overAmount)}，超出部分将从工资扣除！</span>`);
+      lines.push(`🔴 套餐外剩余额度: <span style="color:#ff4d4f;">已超出 ${formatCurrency(overAmount)}，超出部分将从工资扣除！</span>`);
     } else if (remaining <= companyLimit * 0.2) {
-      // 剩余不足 20%：黄色预警
-      lines.push(`🟡 On-Demand已用: <span style="color:#e8a838;">${formatCurrency(onDemandUsed)}</span>`);
-      lines.push(`└ ⚠️ 剩余免费额度仅 <span style="color:#e8a838;">${formatCurrency(remaining)}</span>，请注意控制用量`);
+      lines.push(`🟡 套餐外剩余额度: <span style="color:#e8a838;">${formatCurrency(remaining)}，请注意控制用量</span>`);
     } else {
-      // 正常范围
-      lines.push(`🟢 On-Demand已用: ${formatCurrency(onDemandUsed)}`);
-      lines.push(`└ 剩余免费额度: ${formatCurrency(remaining)}`);
+      lines.push(`🟢 套餐外剩余额度: ${formatCurrency(remaining)}`);
     }
   }
   
   // ── 团队用量 ──
   if (teamOnDemand.used > 0) {
-    lines.push(`👥 团队 On-Demand: ${formatCurrency(teamOnDemand.used)}`);
+    lines.push(`👥 本周期团队共用: ${formatCurrency(teamOnDemand.used)}`);
   }
 
   // ── 最近使用记录（使用代码块保持等宽对齐）──

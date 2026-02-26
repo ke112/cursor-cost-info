@@ -497,17 +497,19 @@ export function formatUsageDisplay(
 
     // 无限额套餐：只显示已用金额，不显示限额和百分比
     if (isUnlimited) {
-        const indicator = getUsageIndicator(0); // 无限额时使用绿色指示器
+        const indicator = getUsageIndicator(0);
         return `${indicator} 已用: ${usedStr}`;
     }
 
-    const limitStr = formatCurrency(total.totalLimit);
+    // 优先使用 API 返回的套餐配额占比，避免 (planUsed+onDemand)/planLimit 超 100% 的异常
+    const autoPercentMatch = summary.autoModelSelectedDisplayMessage?.match(/(\d+)%/);
+    const displayPercent = autoPercentMatch ? parseInt(autoPercentMatch[1], 10) : total.percentage;
 
     if (showProgressBar) {
-        const indicator = getUsageIndicator(total.percentage);
-        return `${indicator} ${total.percentage}% | ${usedStr}/${limitStr}`;
+        const indicator = getUsageIndicator(displayPercent);
+        return `${indicator} ${displayPercent}% | ${usedStr}`;
     } else {
-        return `Cursor: ${usedStr}/${limitStr} (${total.percentage}%)`;
+        return `Cursor: ${usedStr} (${displayPercent}%)`;
     }
 }
 
