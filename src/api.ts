@@ -507,7 +507,7 @@ export function formatUsageDisplay(
 
     if (showProgressBar) {
         const indicator = getUsageIndicator(displayPercent);
-        return `${indicator} ${displayPercent}% | ${usedStr}`;
+        return `${indicator} ${usedStr} | ${displayPercent}%`;
     } else {
         return `Cursor: ${usedStr} (${displayPercent}%)`;
     }
