@@ -1,8 +1,8 @@
 {
     "name": "cursor-cost-info",
     "displayName": "Cursor Cost Info",
-    "description": "Cursor Cost Info Extension",
-    "version": "1.0.2",
+    "description": "Display Cursor API usage and cost in status bar. Real-time quota, on-demand usage, and billing info.",
+    "version": "1.0.3",
     "publisher": "zhangzhihua",
     "author": {
         "name": "徐凤年",
@@ -20,6 +20,19 @@
     "engines": {
         "vscode": "^1.80.0"
     },
+    "keywords": [
+        "cursor",
+        "cost",
+        "info",
+        "usage",
+        "额度",
+        "用量",
+        "花费",
+        "on-demand",
+        "dashboard",
+        "api",
+        "token"
+    ],
     "categories": [
         "Other"
     ],
