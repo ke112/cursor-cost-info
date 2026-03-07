@@ -201,9 +201,9 @@ async function updateUsageInfo() {
 
     currentSummary = summary;
 
-    const total = calculateTotalUsage(summary, null);
+    const total = calculateTotalUsage(summary, COMPANY_ON_DEMAND_LIMIT_CENTS);
 
-    const displayText = formatUsageDisplay(summary, null, true, summary.isUnlimited);
+    const displayText = formatUsageDisplay(summary, COMPANY_ON_DEMAND_LIMIT_CENTS, true, summary.isUnlimited);
     statusBarItem.text = displayText;
 
     const autoPercentMatch = summary.autoModelSelectedDisplayMessage?.match(/(\d+)%/);
@@ -281,8 +281,8 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
   const teamOnDemand = summary.teamUsage?.onDemand ?? { used: 0, limit: null, remaining: null };
   const total = calculateTotalUsage(summary, null);
 
-  // 个人本周期总用量 = plan.breakdown.total
-  const individualTotalUsed = plan.breakdown.total;
+  // 个人本周期总用量 = 套餐内 + onDemand（与状态栏保持一致）
+  const individualTotalUsed = total.totalUsed;
 
   const lines: string[] = [];
 
@@ -299,14 +299,19 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
 
   // ── 本周期已用（合并后的唯一值）──
   // autoPercent 来自 API 的 displayMessage，是套餐配额的真实占比，避免用 totalUsed/planLimit 出现超 100% 的异常
-  const autoPercent = summary.autoModelSelectedDisplayMessage
+  const autoPercentStr = summary.autoModelSelectedDisplayMessage
     ? extractPercentage(summary.autoModelSelectedDisplayMessage)
     : null;
+  // 转换为数字进行比较
+  const autoPercent = autoPercentStr ? parseInt(autoPercentStr, 10) : null;
 
   if (summary.isUnlimited) {
     lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)}`);
-  } else if (autoPercent) {
+  } else if (autoPercent !== null && autoPercent < 100) {
     lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)} (套餐内已用 ${autoPercent}%)`);
+  } else if (autoPercent !== null && autoPercent >= 100) {
+    // 套餐内已用超过100%时，显示已用/剩余更合理
+    lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)}`);
   } else {
     lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)} / ${formatCurrency(total.totalLimit)}`);
   }

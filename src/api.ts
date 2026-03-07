@@ -503,13 +503,26 @@ export function formatUsageDisplay(
 
     // 优先使用 API 返回的套餐配额占比，避免 (planUsed+onDemand)/planLimit 超 100% 的异常
     const autoPercentMatch = summary.autoModelSelectedDisplayMessage?.match(/(\d+)%/);
-    const displayPercent = autoPercentMatch ? parseInt(autoPercentMatch[1], 10) : total.percentage;
+    const apiPercent = autoPercentMatch ? parseInt(autoPercentMatch[1], 10) : total.percentage;
+
+    // 套餐内使用超过 100% 时，显示已用/剩余或超出
+    // 套餐外(onDemand)还有限额，显示套餐外剩余；套餐外也用完了才显示超出
+    if (apiPercent >= 100) {
+        const onDemandRemaining = total.onDemandLimit - total.onDemandUsed;
+        const indicator = getUsageIndicator(100);
+        if (onDemandRemaining <= 0) {
+            // 套餐外也用完了，显示超出金额
+            return `${indicator} ${usedStr} | 超出 ${formatCurrency(Math.abs(onDemandRemaining))}`;
+        } else {
+            return `${indicator} ${usedStr} | 剩余 ${formatCurrency(onDemandRemaining)}`;
+        }
+    }
 
     if (showProgressBar) {
-        const indicator = getUsageIndicator(displayPercent);
-        return `${indicator} ${usedStr} | ${displayPercent}%`;
+        const indicator = getUsageIndicator(apiPercent);
+        return `${indicator} ${usedStr} | ${apiPercent}%`;
     } else {
-        return `Cursor: ${usedStr} (${displayPercent}%)`;
+        return `Cursor: ${usedStr} (${apiPercent}%)`;
     }
 }
 
