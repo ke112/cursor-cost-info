@@ -2,13 +2,14 @@
     "name": "cursor-cost-info",
     "displayName": "Cursor Cost Info",
     "description": "Display Cursor API usage and cost in status bar. Real-time quota, on-demand usage, and billing info.",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "publisher": "zhangzhihua",
     "author": {
         "name": "徐凤年",
         "email": "zhangzhihua.email@gmail.com"
     },
     "icon": "images/logo.jpeg",
+    "license": "LICENSE",
     "repository": {
         "type": "git",
         "url": "https://github.com/ke112/cursor-cost-info"
@@ -40,6 +41,21 @@
         "onStartupFinished"
     ],
     "main": "./out/extension.js",
+    "files": [
+        "images",
+        "out",
+        "node_modules/@mherod",
+        "node_modules/@nodelib",
+        "node_modules/braces",
+        "node_modules/fast-glob",
+        "node_modules/fill-range",
+        "node_modules/is-extglob",
+        "node_modules/is-glob",
+        "node_modules/is-number",
+        "node_modules/micromatch",
+        "node_modules/picomatch",
+        "node_modules/to-regex-range"
+    ],
     "contributes": {
         "commands": [
             {
