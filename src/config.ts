@@ -1,6 +1,20 @@
 import { readCursorAccessToken } from './auth';
+import * as vscode from 'vscode';
 
 const CURSOR_COOKIE_DOMAIN = 'cursor.com';
+
+/** 默认公司 On-Demand 限额（美元） */
+const DEFAULT_COMPANY_ON_DEMAND_LIMIT = 20;
+
+/**
+ * 获取公司 On-Demand 限额配置（美元）
+ * 用户可在 VSCode 设置中配置 cursorCostInfo.companyOnDemandLimit
+ */
+export function getCompanyOnDemandLimit(): number {
+    const config = vscode.workspace.getConfiguration('cursorCostInfo');
+    const limit = config.get<number>('companyOnDemandLimit', DEFAULT_COMPANY_ON_DEMAND_LIMIT);
+    return limit;
+}
 
 /**
  * 认证凭据类型

@@ -4,16 +4,13 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, USAGE_EVENT_KIND_USAGE_BASED, UsageEvent, UsageSummary } from './api';
 import { readCursorCachedEmail } from './auth';
-import { getConfigHelpText, resolveAuth } from './config';
+import { getCompanyOnDemandLimit, getConfigHelpText, resolveAuth } from './config';
 
 /** 刷新间隔（毫秒） */
 const REFRESH_INTERVAL = 30000;
 
 /** 通知阈值百分比列表 */
 const NOTIFICATION_THRESHOLDS = [80, 85, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100];
-
-/** 公司 On-Demand 限额（美分），超过此值员工自费 */
-const COMPANY_ON_DEMAND_LIMIT_CENTS = 2000; // $20
 
 let statusBarItem: vscode.StatusBarItem;
 let refreshTimer: NodeJS.Timeout | undefined;
@@ -201,9 +198,10 @@ async function updateUsageInfo() {
 
     currentSummary = summary;
 
-    const total = calculateTotalUsage(summary, COMPANY_ON_DEMAND_LIMIT_CENTS);
+    const companyOnDemandLimitCents = getCompanyOnDemandLimit() * 100;
+    const total = calculateTotalUsage(summary, companyOnDemandLimitCents);
 
-    const displayText = formatUsageDisplay(summary, COMPANY_ON_DEMAND_LIMIT_CENTS, true, summary.isUnlimited);
+    const displayText = formatUsageDisplay(summary, companyOnDemandLimitCents, true, summary.isUnlimited);
     statusBarItem.text = displayText;
 
     const autoPercentMatch = summary.autoModelSelectedDisplayMessage?.match(/(\d+)%/);
@@ -320,7 +318,7 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
 
   // ── On-Demand 用量明细 ──
   if (onDemand.enabled) {
-    const companyLimit = COMPANY_ON_DEMAND_LIMIT_CENTS;
+    const companyLimit = getCompanyOnDemandLimit() * 100;
     const remaining = companyLimit - onDemandUsed;
     const overAmount = onDemandUsed - companyLimit;
 

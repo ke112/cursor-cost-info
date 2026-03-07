@@ -50,7 +50,17 @@
                 "command": "cursor.costInfo.refresh",
                 "title": "Refresh Cursor Cost Info"
             }
-        ]
+        ],
+        "configuration": {
+            "title": "Cursor Cost Info",
+            "properties": {
+                "cursorCostInfo.companyOnDemandLimit": {
+                    "type": "number",
+                    "default": 20,
+                    "description": "公司 On-Demand 限额（美元），超过此值员工自费。例：20 表示 $20 限额"
+                }
+            }
+        }
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
