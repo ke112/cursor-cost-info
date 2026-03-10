@@ -187,7 +187,7 @@ async function updateUsageInfo() {
         auth,
         summary.billingCycleStart,
         summary.billingCycleEnd,
-        10
+        1000
       );
       if (usageEventsResponse && usageEventsResponse.usageEventsDisplay) {
         currentUsageEvents = usageEventsResponse.usageEventsDisplay;
@@ -341,16 +341,24 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
     lines.push('');
     lines.push('<b>--- 最近使用记录 ---</b>');
 
-    // 计算平均用量：总消耗 / 套餐使用了多少天
-    const billingCycleStart = new Date(summary.billingCycleStart);
-    const today = new Date();
-    const daysSinceCycleStart = Math.max(1, Math.ceil((today.getTime() - billingCycleStart.getTime()) / (1000 * 60 * 60 * 24)));
+    // 计算平均用量：总消耗 / 有消耗的天数
     const plan = summary.individualUsage.plan;
     const onDemand = summary.individualUsage.onDemand;
     const totalUsed = (plan.breakdown?.total ?? plan.used) + onDemand.used;
-    const averageUsage = Math.round(totalUsed / daysSinceCycleStart);
+
+    // 统计有实际消耗的天数（去重日期）
+    const activeDays = new Set<string>();
+    for (const event of currentUsageEvents) {
+      if (event.tokenUsage.totalCents != null && event.tokenUsage.totalCents > 0) {
+        const eventDate = new Date(parseInt(event.timestamp, 10)).toISOString().split('T')[0];
+        activeDays.add(eventDate);
+      }
+    }
+    const daysWithUsage = Math.max(1, activeDays.size);
+    const averageUsage = Math.round(totalUsed / daysWithUsage);
 
     // 计算今日用量：筛选今天的使用记录并累加
+    const today = new Date();
     const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
     let todayUsage = 0;
     for (const event of currentUsageEvents) {
@@ -360,7 +368,7 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
       }
     }
 
-    lines.push(`📊 平均用量: ${formatCurrency(averageUsage)}/天 (已用${daysSinceCycleStart}天)`);
+    lines.push(`📊 平均用量: ${formatCurrency(averageUsage)}/天 (共${daysWithUsage}天有消耗)`);
     lines.push(`📅 今日用量: ${formatCurrency(todayUsage)}`);
 
     // 列宽定义: Time=11, Type=9, Model=25, Tokens=9, Cost=8
