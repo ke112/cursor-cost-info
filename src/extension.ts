@@ -341,6 +341,28 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
     lines.push('');
     lines.push('<b>--- 最近使用记录 ---</b>');
 
+    // 计算平均用量：总消耗 / 套餐使用了多少天
+    const billingCycleStart = new Date(summary.billingCycleStart);
+    const today = new Date();
+    const daysSinceCycleStart = Math.max(1, Math.ceil((today.getTime() - billingCycleStart.getTime()) / (1000 * 60 * 60 * 24)));
+    const plan = summary.individualUsage.plan;
+    const onDemand = summary.individualUsage.onDemand;
+    const totalUsed = (plan.breakdown?.total ?? plan.used) + onDemand.used;
+    const averageUsage = Math.round(totalUsed / daysSinceCycleStart);
+
+    // 计算今日用量：筛选今天的使用记录并累加
+    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+    let todayUsage = 0;
+    for (const event of currentUsageEvents) {
+      const eventDate = new Date(parseInt(event.timestamp, 10)).toISOString().split('T')[0];
+      if (eventDate === todayStr && event.tokenUsage.totalCents != null) {
+        todayUsage += event.tokenUsage.totalCents;
+      }
+    }
+
+    lines.push(`📊 平均用量: ${formatCurrency(averageUsage)}/天 (已用${daysSinceCycleStart}天)`);
+    lines.push(`📅 今日用量: ${formatCurrency(todayUsage)}`);
+
     // 列宽定义: Time=11, Type=9, Model=25, Tokens=9, Cost=8
     const COL = { time: 11, type: 9, model: 25, token: 9, cost: 8 };
     const tableLines: string[] = [];
