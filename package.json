@@ -19,7 +19,8 @@
         "url": "https://github.com/ke112/cursor-cost-info/issues"
     },
     "engines": {
-        "vscode": "^1.80.0"
+        "vscode": "^1.80.0",
+        "cursor": "^1.80.0"
     },
     "keywords": [
         "cursor",
