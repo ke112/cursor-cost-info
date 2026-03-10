@@ -72,7 +72,7 @@
             "properties": {
                 "cursorCostInfo.companyOnDemandLimit": {
                     "type": "number",
-                    "default": 20,
+                    "default": 0,
                     "description": "公司 On-Demand 限额（美元），超过此值员工自费。例：20 表示 $20 限额"
                 }
             }

@@ -1,10 +1,10 @@
-import { readCursorAccessToken } from './auth';
 import * as vscode from 'vscode';
+import { readCursorAccessToken } from './auth';
 
 const CURSOR_COOKIE_DOMAIN = 'cursor.com';
 
 /** 默认公司 On-Demand 限额（美元） */
-const DEFAULT_COMPANY_ON_DEMAND_LIMIT = 20;
+const DEFAULT_COMPANY_ON_DEMAND_LIMIT = 0;
 
 /**
  * 获取公司 On-Demand 限额配置（美元）
