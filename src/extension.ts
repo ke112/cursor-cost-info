@@ -363,8 +363,9 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
     let todayUsage = 0;
     for (const event of currentUsageEvents) {
       const eventDate = new Date(parseInt(event.timestamp, 10)).toISOString().split('T')[0];
-      if (eventDate === todayStr && event.tokenUsage.totalCents != null) {
-        todayUsage += event.tokenUsage.totalCents;
+      if (eventDate === todayStr) {
+        // 直接使用 chargedCents（包含 token 费用 + 平台费用的最终费用）
+        todayUsage += event.chargedCents;
       }
     }
 
@@ -428,7 +429,8 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
       const model = padEndDisplay(modelName, COL.model);
       const totalTokens = (event.tokenUsage.inputTokens || 0) + (event.tokenUsage.outputTokens || 0) + (event.tokenUsage.cacheWriteTokens || 0) + (event.tokenUsage.cacheReadTokens || 0);
       const tokens = padStartDisplay(formatTokenCount(totalTokens), COL.token);
-      const cost = (event.tokenUsage.totalCents == null ? '-' : `$${(event.tokenUsage.totalCents / 100).toFixed(2)}`).padStart(COL.cost);
+      // 直接使用 chargedCents（包含所有费用的最终收费）
+      const cost = `$${(event.chargedCents / 100).toFixed(2)}`.padStart(COL.cost);
       tableLines.push(`${time} | ${chargeType} | ${model} | ${tokens} | ${cost}`);
     }
 

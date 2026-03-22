@@ -82,6 +82,7 @@ export interface UsageEvent {
     cursorTokenFee: number;
     isChargeable: boolean;
     isHeadless: boolean;
+    chargedCents: number;
 }
 
 /**
