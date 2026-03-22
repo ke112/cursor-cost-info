@@ -304,14 +304,14 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
   const autoPercent = autoPercentStr ? parseInt(autoPercentStr, 10) : null;
 
   if (summary.isUnlimited) {
-    lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)}`);
+    lines.push(`💰 本周期套餐用量: ${formatCurrency(individualTotalUsed)}`);
   } else if (autoPercent !== null && autoPercent < 100) {
-    lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)} (套餐内已用 ${autoPercent}%)`);
+    lines.push(`💰 本周期套餐用量: ${formatCurrency(individualTotalUsed)} (已用 ${autoPercent}%)`);
   } else if (autoPercent !== null && autoPercent >= 100) {
     // 套餐内已用超过100%时，显示已用/剩余更合理
-    lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)}`);
+    lines.push(`💰 本周期套餐用量: ${formatCurrency(individualTotalUsed)}`);
   } else {
-    lines.push(`💰 本周期个人用量: ${formatCurrency(individualTotalUsed)} / ${formatCurrency(total.totalLimit)}`);
+    lines.push(`💰 本周期套餐用量: ${formatCurrency(individualTotalUsed)} / ${formatCurrency(total.totalLimit)}`);
   }
 
   const onDemandUsed = onDemand.used;
