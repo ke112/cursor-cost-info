@@ -1,7 +1,7 @@
 {
     "name": "cursor-cost-info",
     "displayName": "Cursor Cost Info",
-    "description": "Display Cursor API usage and cost in status bar. Real-time quota, on-demand usage, and billing info.",
+    "description": "一个 VS Code / Cursor 扩展，在状态栏实时显示 Cursor API 使用额度，让你对 AI 代码助手的消耗了如指掌。零配置自动读取登录凭据，开箱即用！",
     "version": "1.0.4",
     "publisher": "zhangzhihua",
     "author": {
