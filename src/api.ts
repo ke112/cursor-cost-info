@@ -418,12 +418,23 @@ export function calculateTotalUsage(summary: UsageSummary, customOnDemandLimit: 
 
     const totalUsed = planUsed + onDemand.used;
 
-    // 分母 = 套餐内已用总量 / 0.64 + 套餐外配置
-    // 套餐内已用 / 0.64 反推套餐内总限额（假设套餐内显示的百分比是基于这个限额计算的）
-    // 这样总分母不会超过套餐内总限额 + 套餐外配置，避免百分比超过100%
-    const planLimitInferred = plan.limit > 0 && plan.limit > 0 ? planUsed / 0.64 : plan.limit;
+    // 分母 = 套餐内已用总量 / (totalPercentUsed / 100) + 套餐外配置
+    // API 返回的 totalPercentUsed 是百分比值（如 0.425 表示 0.425%），需要除以 100转为小数
+    const planLimitInferred = plan.limit > 0 && plan.totalPercentUsed
+        ? planUsed / (plan.totalPercentUsed / 100)
+        : plan.limit;
+    console.log('[Cursor Cost Info] percentage Debug:', {
+        planUsed,
+        totalPercentUsed: plan.totalPercentUsed,
+        planLimitInferred,
+        onDemandLimit,
+        totalLimit: planLimitInferred + onDemandLimit,
+        planTotal: planUsed + (planLimitInferred + onDemandLimit),
+        result: (planUsed / (planLimitInferred + onDemandLimit)) * 100
+    });
     const totalLimit = planLimitInferred + onDemandLimit;
-    const percentage = totalLimit > 0 ? Math.round((totalUsed / totalLimit) * 100) : 0;
+    // 百分比 = 套餐内已用 / (套餐内总限额 + 套餐外限额)
+    const percentage = totalLimit > 0 ? Math.round((planUsed / totalLimit) * 100) : 0;
 
     const totalRemaining = (totalLimit - totalUsed);
 
@@ -500,6 +511,16 @@ export function formatUsageDisplay(
     isUnlimited: boolean = false
 ): string {
     const total = calculateTotalUsage(summary, customOnDemandLimit);
+    console.log('[Cursor Cost Info] 计算调试:', {
+        planUsed: total.planUsed,
+        planLimit: total.planLimit,
+        onDemandUsed: total.onDemandUsed,
+        onDemandLimit: total.onDemandLimit,
+        totalLimit: total.totalLimit,
+        totalUsed: total.totalUsed,
+        percentage: total.percentage,
+        totalPercentUsed: summary.individualUsage?.plan?.totalPercentUsed
+    });
     const usedStr = formatCurrency(total.totalUsed);
 
     // 无限额套餐：只显示已用金额，不显示限额和百分比
@@ -508,14 +529,22 @@ export function formatUsageDisplay(
         return `${indicator} 已用: ${usedStr}`;
     }
 
-    // 使用计算得出的总百分比: (套餐内已用 + 套餐外已用) / (套餐限额 + 套餐外限额)
-    const displayPercent = total.percentage;
+    // 计算精确百分比，保留2位小数
+    const precisePercent = total.totalLimit > 0
+        ? (total.planUsed / total.totalLimit) * 100
+        : 0;
+    const displayPercentStr = precisePercent < 1
+        ? precisePercent.toFixed(2)
+        : String(Math.round(precisePercent));
+    const displayPercentNum = precisePercent < 1
+        ? precisePercent
+        : Math.round(precisePercent);
 
     if (showProgressBar) {
-        const indicator = getUsageIndicator(displayPercent);
-        return `${indicator} ${usedStr} | ${displayPercent}%`;
+        const indicator = getUsageIndicator(displayPercentNum);
+        return `${indicator} ${usedStr} | ${displayPercentStr}%`;
     } else {
-        return `Cursor: ${usedStr} (${displayPercent}%)`;
+        return `Cursor: ${usedStr} (${displayPercentStr}%)`;
     }
 }
 

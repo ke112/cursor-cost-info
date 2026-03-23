@@ -204,8 +204,10 @@ async function updateUsageInfo() {
     const displayText = formatUsageDisplay(summary, companyOnDemandLimitCents, true, summary.isUnlimited);
     statusBarItem.text = displayText;
 
-    const autoPercentMatch = summary.autoModelSelectedDisplayMessage?.match(/(\d+)%/);
-    const displayPercent = autoPercentMatch ? parseInt(autoPercentMatch[1], 10) : total.percentage;
+    const planPercent = summary.individualUsage?.plan?.totalPercentUsed;
+    const displayPercent = planPercent !== null && planPercent !== undefined
+      ? planPercent * 100
+      : total.percentage;
 
     if (summary.isUnlimited) {
       statusBarItem.color = getUsageColor(0);
@@ -263,14 +265,6 @@ function formatCountdown(billingCycleEnd: string): string {
 }
 
 /**
- * 从显示消息中提取百分比数字
- */
-function extractPercentage(message: string): string | null {
-  const match = message.match(/(\d+)%/);
-  return match ? match[1] : null;
-}
-
-/**
  * 生成详细的工具提示信息
  */
 function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
@@ -296,18 +290,20 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
   lines.push(`📅 距离本周期重置: ${countdown}`);
 
   // ── 本周期已用（合并后的唯一值）──
-  // autoPercent 来自 API 的 displayMessage，是套餐配额的真实占比，避免用 totalUsed/planLimit 出现超 100% 的异常
-  const autoPercentStr = summary.autoModelSelectedDisplayMessage
-    ? extractPercentage(summary.autoModelSelectedDisplayMessage)
+  // 直接使用 API 返回的 totalPercentUsed，避免字符串解析损失精度
+  const planPercent = summary.individualUsage?.plan?.totalPercentUsed;
+  const autoPercentNum = planPercent !== null && planPercent !== undefined
+    ? planPercent
     : null;
-  // 转换为数字进行比较
-  const autoPercent = autoPercentStr ? parseInt(autoPercentStr, 10) : null;
+  const autoPercent = autoPercentNum !== null
+    ? planPercent!.toFixed(2)
+    : null;
 
   if (summary.isUnlimited) {
     lines.push(`💰 本周期套餐用量: ${formatCurrency(individualTotalUsed)}`);
-  } else if (autoPercent !== null && autoPercent < 100) {
+  } else if (autoPercentNum !== null && autoPercentNum < 100) {
     lines.push(`💰 本周期套餐用量: ${formatCurrency(individualTotalUsed)} (已用 ${autoPercent}%)`);
-  } else if (autoPercent !== null && autoPercent >= 100) {
+  } else if (autoPercentNum !== null && autoPercentNum >= 100) {
     // 套餐内已用超过100%时，显示已用/剩余更合理
     lines.push(`💰 本周期套餐用量: ${formatCurrency(individualTotalUsed)}`);
   } else {
