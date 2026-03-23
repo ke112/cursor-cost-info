@@ -325,6 +325,7 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
     } else {
       lines.push(`🟢 套餐外剩余额度: ${formatCurrency(remaining)}`);
     }
+    lines.push(`💡 套餐外设置额度: 输入搜索 "Company On Demand Limit" 设置公司限额`)
   }
   
   // ── 团队用量 ──
