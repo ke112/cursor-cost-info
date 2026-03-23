@@ -417,9 +417,15 @@ export function calculateTotalUsage(summary: UsageSummary, customOnDemandLimit: 
         : (onDemand.limit !== null ? onDemand.limit : 0);
 
     const totalUsed = planUsed + onDemand.used;
-    const totalLimit = plan.limit + onDemandLimit;
-    const totalRemaining = (totalLimit - totalUsed);
+
+    // 分母 = 套餐内已用总量 / 0.64 + 套餐外配置
+    // 套餐内已用 / 0.64 反推套餐内总限额（假设套餐内显示的百分比是基于这个限额计算的）
+    // 这样总分母不会超过套餐内总限额 + 套餐外配置，避免百分比超过100%
+    const planLimitInferred = plan.limit > 0 && plan.limit > 0 ? planUsed / 0.64 : plan.limit;
+    const totalLimit = planLimitInferred + onDemandLimit;
     const percentage = totalLimit > 0 ? Math.round((totalUsed / totalLimit) * 100) : 0;
+
+    const totalRemaining = (totalLimit - totalUsed);
 
     return {
         totalUsed,
