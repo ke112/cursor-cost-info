@@ -317,15 +317,15 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
     const companyLimit = getCompanyOnDemandLimit() * 100;
     const remaining = companyLimit - onDemandUsed;
     const overAmount = onDemandUsed - companyLimit;
+    const limitTip = `<span style="color:#999;"> 💡可搜索 "Demand Limit" 设置公司限额</span>`;
 
     if (overAmount > 0) {
-      lines.push(`🔴 套餐外剩余额度: <span style="color:#ff4d4f;">已超出 ${formatCurrency(overAmount)}，超出部分将从工资扣除！</span>`);
+      lines.push(`🔴 套餐外剩余额度: <span style="color:#ff4d4f;">已超出 ${formatCurrency(overAmount)}，超出部分将从工资扣除！</span> ${limitTip}`);
     } else if (remaining <= companyLimit * 0.2) {
-      lines.push(`🟡 套餐外剩余额度: <span style="color:#e8a838;">${formatCurrency(remaining)}，请注意控制用量</span>`);
+      lines.push(`🟡 套餐外剩余额度: <span style="color:#e8a838;">${formatCurrency(remaining)}，请注意控制用量</span> ${limitTip}`);
     } else {
-      lines.push(`🟢 套餐外剩余额度: ${formatCurrency(remaining)}`);
+      lines.push(`🟢 套餐外剩余额度: ${formatCurrency(remaining)} ${limitTip}`);
     }
-    lines.push(`💡 套餐外设置额度: 输入搜索 "Company On Demand Limit" 设置公司限额`)
   }
   
   // ── 团队用量 ──
