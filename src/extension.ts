@@ -208,15 +208,16 @@ async function updateUsageInfo() {
     const displayPercent = planPercent !== null && planPercent !== undefined
       ? planPercent * 100
       : total.percentage;
+    const colorPercent = total.percentage;
 
     if (summary.isUnlimited) {
       statusBarItem.color = getUsageColor(0);
       statusBarItem.backgroundColor = undefined;
     } else {
-      statusBarItem.color = getUsageColor(displayPercent);
-      if (displayPercent >= 90) {
+      statusBarItem.color = getUsageColor(colorPercent);
+      if (colorPercent >= 90) {
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-      } else if (displayPercent >= 80) {
+      } else if (colorPercent >= 80) {
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
       } else {
         statusBarItem.backgroundColor = undefined;
@@ -321,6 +322,8 @@ function getDetailedTooltip(summary: UsageSummary): vscode.MarkdownString {
 
     if (overAmount > 0) {
       lines.push(`🔴 套餐外剩余额度: <span style="color:#ff4d4f;">已超出 ${formatCurrency(overAmount)}，超出部分将从工资扣除！</span> ${limitTip}`);
+    } else if (remaining <= companyLimit * 0.1) {
+      lines.push(`🔴 套餐外剩余额度: <span style="color:#ff4d4f;">${formatCurrency(remaining)}，即将耗尽！</span> ${limitTip}`);
     } else if (remaining <= companyLimit * 0.2) {
       lines.push(`🟡 套餐外剩余额度: <span style="color:#e8a838;">${formatCurrency(remaining)}，请注意控制用量</span> ${limitTip}`);
     } else {

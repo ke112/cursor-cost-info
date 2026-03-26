@@ -456,14 +456,12 @@ export function calculateTotalUsage(summary: UsageSummary, customOnDemandLimit: 
  * @returns 颜色字符串（VS Code 主题颜色或十六进制）
  */
 export function getUsageColor(percentage: number): string {
-    if (percentage < 50) {
-        return '#4EC9B0';
-    } else if (percentage < 80) {
-        return '#DCDCAA';
-    } else if (percentage < 90) {
-        return '#CE9178';
-    } else {
+    if (percentage >= 90) {
         return '#F48771';
+    } else if (percentage >= 80) {
+        return '#DCDCAA';
+    } else {
+        return '#4EC9B0';
     }
 }
 
