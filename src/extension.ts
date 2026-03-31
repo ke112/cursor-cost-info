@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import * as vscode from 'vscode';
 import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, USAGE_EVENT_KIND_USAGE_BASED, UsageEvent, UsageSummary } from './api';
-import { readCursorCachedEmail } from './auth';
+import { initializeAuthStorage, readCursorCachedEmail, storeExtensionAuthSession } from './auth';
 import { getCompanyOnDemandLimit, getConfigHelpText, resolveAuth } from './config';
 
 /** 刷新间隔（毫秒） */
@@ -19,12 +20,25 @@ let lastNotificationPercentage: number | null = null;
 let currentUsageEvents: UsageEvent[] = [];
 let currentEmail: string | null = null;
 let isWindowFocused = true;
+let hasShownLoginPrompt = false;
+
+interface LoginPollMetadata {
+  uuid: string;
+  verifier: string;
+}
+
+interface LoginPollResult {
+  accessToken: string;
+  refreshToken?: string;
+  email?: string;
+}
 
 /**
  * 扩展激活时调用
  */
 export function activate(context: vscode.ExtensionContext) {
   console.log('Cursor 额度信息扩展已激活');
+  initializeAuthStorage(context.globalState);
 
   // 创建状态栏项
   statusBarItem = vscode.window.createStatusBarItem(
@@ -33,8 +47,7 @@ export function activate(context: vscode.ExtensionContext) {
     100
   );
   statusBarItem.name = 'Cursor Cost';
-  statusBarItem.command = 'cursor.costInfo.showDetails';
-  statusBarItem.tooltip = '点击在浏览器中打开 Cursor 额度详情';
+  setLoginRequiredStatus();
   context.subscriptions.push(statusBarItem);
 
   // 注册显示详情命令
@@ -46,6 +59,15 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
   context.subscriptions.push(showDetailsCommand);
+
+  // 注册打开登录页面命令
+  const openLoginCommand = vscode.commands.registerCommand(
+    'cursor.costInfo.openLogin',
+    async () => {
+      await openCursorLoginFlow();
+    }
+  );
+  context.subscriptions.push(openLoginCommand);
 
   // 注册刷新命令
   const refreshCommand = vscode.commands.registerCommand(
@@ -163,20 +185,19 @@ function setupAutoReloadWatcher(context: vscode.ExtensionContext) {
  */
 async function updateUsageInfo() {
   try {
-    statusBarItem.text = '$(sync~spin) 加载中...';
-    statusBarItem.show();
-
+    // 先检查是否已登录，未登录则直接显示登录提示，不显示loading
     const auth = await resolveAuth();
 
     if (!auth) {
-      statusBarItem.text = '$(warning) Cursor: 未找到认证信息';
-      statusBarItem.tooltip = getConfigHelpText();
-      statusBarItem.command = 'cursor.costInfo.refresh';
-      statusBarItem.color = undefined;
-      statusBarItem.backgroundColor = undefined;
-      statusBarItem.show();
+      setLoginRequiredStatus();
+      showLoginPromptOnce();
       return;
     }
+
+    hasShownLoginPrompt = false;
+
+    statusBarItem.text = '$(sync~spin) 加载中...';
+    statusBarItem.show();
 
     currentEmail = await readCursorCachedEmail();
     const summary = await fetchUsageSummaryAuto(auth);
@@ -241,6 +262,151 @@ async function updateUsageInfo() {
     statusBarItem.show();
     // 不弹出悬浮错误提示，仅在状态栏显示失败态，点击可重试
   }
+}
+
+function setLoginRequiredStatus() {
+  statusBarItem.text = '$(account) Cursor: 去授权登录';
+  statusBarItem.tooltip = '点击打开 Cursor Web 端登录页，登录授权后自动刷新';
+  statusBarItem.command = 'cursor.costInfo.openLogin';
+  statusBarItem.color = '#F48771';
+  statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+  statusBarItem.show();
+}
+
+function showLoginPromptOnce() {
+  if (hasShownLoginPrompt) {
+    return;
+  }
+
+  hasShownLoginPrompt = true;
+  vscode.window.showWarningMessage('Cursor Cost: 请先登录', { modal: false }, '去登录').then((selection) => {
+    if (selection === '去登录') {
+      vscode.commands.executeCommand('cursor.costInfo.openLogin');
+    }
+  });
+}
+
+function createCursorLoginDeepControlUrl(): string {
+  return createCursorLoginSession().loginUrl;
+}
+
+function createCursorLoginSession(): { metadata: LoginPollMetadata; loginUrl: string } {
+  const verifier = toBase64Url(randomBytes(32));
+  const challenge = toBase64Url(createHash('sha256').update(verifier).digest());
+  const uuid = randomUUID();
+  const params = new URLSearchParams({
+    challenge,
+    uuid,
+    mode: 'login',
+    redirectTarget: 'cli'
+  });
+
+  return {
+    metadata: { uuid, verifier },
+    loginUrl: `https://cursor.com/cn/loginDeepControl?${params.toString()}`
+  };
+}
+
+function toBase64Url(buffer: Buffer): string {
+  return buffer
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+async function openCursorLoginFlow(): Promise<void> {
+  const loginSession = createCursorLoginSession();
+
+  statusBarItem.text = '$(sync~spin) Cursor: 等待授权';
+  statusBarItem.tooltip = '已打开 Cursor 授权页，等待网页确认登录';
+  statusBarItem.command = undefined;
+  statusBarItem.color = '#F2C94C';
+  statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+  statusBarItem.show();
+
+  await vscode.env.openExternal(vscode.Uri.parse(loginSession.loginUrl));
+
+  const result = await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: 'Cursor Cost',
+      cancellable: false
+    },
+    async (progress) => {
+      progress.report({ message: '等待网页授权完成...' });
+      return pollCursorLoginResult(loginSession.metadata);
+    }
+  );
+
+  if (!result) {
+    setLoginRequiredStatus();
+    vscode.window.showWarningMessage('Cursor Cost: 没有收到授权结果，请完成网页授权后重试');
+    return;
+  }
+
+  await storeExtensionAuthSession(result);
+  hasShownLoginPrompt = false;
+  vscode.window.showInformationMessage('Cursor Cost: 授权成功，正在刷新状态');
+  await updateUsageInfo();
+}
+
+async function pollCursorLoginResult(metadata: LoginPollMetadata): Promise<LoginPollResult | null> {
+  const baseDelayMs = 1000;
+  const maxDelayMs = 10000;
+  const maxAttempts = 150;
+  let consecutiveFailures = 0;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const params = new URLSearchParams({
+        uuid: metadata.uuid,
+        verifier: metadata.verifier
+      });
+      const response = await fetch(`https://api2.cursor.sh/auth/poll?${params.toString()}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.status === 404) {
+        consecutiveFailures = 0;
+        await delay(Math.min(baseDelayMs * Math.pow(1.2, attempt), maxDelayMs));
+        continue;
+      }
+
+      if (!response.ok) {
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= 3) {
+          return null;
+        }
+        await delay(Math.min(baseDelayMs * Math.pow(1.2, attempt), maxDelayMs));
+        continue;
+      }
+
+      consecutiveFailures = 0;
+      const result = await response.json() as Partial<LoginPollResult>;
+      if (typeof result.accessToken === 'string' && result.accessToken.length > 0) {
+        return {
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          email: result.email
+        };
+      }
+    } catch {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 3) {
+        return null;
+      }
+      await delay(Math.min(baseDelayMs * Math.pow(1.2, attempt), maxDelayMs));
+    }
+  }
+
+  return null;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

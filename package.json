@@ -64,6 +64,10 @@
                 "title": "Show Cursor Cost Details"
             },
             {
+                "command": "cursor.costInfo.openLogin",
+                "title": "Open Cursor Login"
+            },
+            {
                 "command": "cursor.costInfo.refresh",
                 "title": "Refresh Cursor Cost Info"
             }

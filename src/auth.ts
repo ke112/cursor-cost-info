@@ -2,6 +2,21 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { execFile } from 'child_process';
+import * as vscode from 'vscode';
+
+const AUTH_STORAGE_KEY = 'cursorCostInfo.authSession';
+
+interface StoredAuthSession {
+    accessToken: string;
+    refreshToken?: string;
+    email?: string;
+}
+
+let authStorage: vscode.Memento | undefined;
+
+export function initializeAuthStorage(storage: vscode.Memento): void {
+    authStorage = storage;
+}
 
 /**
  * 根据操作系统返回 Cursor 的 globalStorage 数据库路径
@@ -103,14 +118,17 @@ export function extractUserIdFromToken(token: string): string | null {
 export async function readCursorCachedEmail(): Promise<string | null> {
     try {
         const dbPath = getCursorStoragePath();
-        if (!fs.existsSync(dbPath)) { return null; }
+        if (!fs.existsSync(dbPath)) { return readStoredAuthSession()?.email ?? null; }
         const email = await querySqlite(
             dbPath,
             "SELECT value FROM ItemTable WHERE key='cursorAuth/cachedEmail';"
         );
-        return (email && email.trim().length > 0) ? email.trim() : null;
+        if (email && email.trim().length > 0) {
+            return email.trim();
+        }
+        return readStoredAuthSession()?.email ?? null;
     } catch {
-        return null;
+        return readStoredAuthSession()?.email ?? null;
     }
 }
 
@@ -125,7 +143,7 @@ export async function readCursorAccessToken(): Promise<string | null> {
         const dbPath = getCursorStoragePath();
 
         if (!fs.existsSync(dbPath)) {
-            return null;
+            return readStoredAuthSession()?.accessToken ?? null;
         }
 
         const token = await querySqlite(
@@ -137,8 +155,24 @@ export async function readCursorAccessToken(): Promise<string | null> {
             return token.trim();
         }
 
-        return null;
+        return readStoredAuthSession()?.accessToken ?? null;
     } catch {
+        return readStoredAuthSession()?.accessToken ?? null;
+    }
+}
+
+export async function storeExtensionAuthSession(session: StoredAuthSession): Promise<void> {
+    if (!authStorage) {
+        return;
+    }
+
+    await authStorage.update(AUTH_STORAGE_KEY, session);
+}
+
+function readStoredAuthSession(): StoredAuthSession | null {
+    const session = authStorage?.get<StoredAuthSession>(AUTH_STORAGE_KEY);
+    if (!session?.accessToken) {
         return null;
     }
+    return session;
 }
