@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, USAGE_EVENT_KIND_USAGE_BASED, UsageEvent, UsageSummary } from './api';
-import { initializeAuthStorage, readCursorCachedEmail } from './auth';
+import { getCursorStoragePath, initializeAuthStorage, readCursorCachedEmail } from './auth';
 import { getCompanyOnDemandLimit, getConfigHelpText, resolveAuth } from './config';
 
 /** 刷新间隔（毫秒） */
@@ -20,7 +20,6 @@ let currentUsageEvents: UsageEvent[] = [];
 let currentEmail: string | null = null;
 let isWindowFocused = true;
 let hasShownLoginPrompt = false;
-let loginDetectionTimer: NodeJS.Timeout | undefined;
 
 /**
  * 扩展激活时调用
@@ -64,8 +63,6 @@ export function activate(context: vscode.ExtensionContext) {
     async () => {
       try {
         await vscode.commands.executeCommand('editor.cpp.login');
-        // 登录命令执行后，短间隔轮询检测登录状态变化，及时刷新状态栏
-        startLoginDetection();
       } catch (err) {
         console.error('[Cursor Cost Info] 触发登录失败:', err);
         await vscode.env.openExternal(vscode.Uri.parse('https://cursor.com/cn/settings'));
@@ -88,10 +85,11 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // ── 监听 Cursor SQLite 数据库变化 ──
+  // 登录/退出登录/token 刷新时 Cursor 会写 state.vscdb，检测到变化立即刷新
+  setupCursorAuthWatcher(context);
+
   // ── 自动重载机制 ──
-  // 打包脚本安装新版本后 touch ~/.cursor-cost-info/.reload-trigger
-  // 插件通过 fs.watchFile (polling) 检测到 mtime 变化，自动执行 Reload Window
-  // 优势：不依赖键盘模拟、不依赖 URI Scheme、不受窗口焦点/输入法影响
   setupAutoReloadWatcher(context);
 
   // 初始加载
@@ -108,31 +106,34 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 /**
- * 登录命令执行后，以 2 秒间隔检测登录状态，检测到登录后自动停止
+ * 监听 Cursor 的 SQLite 数据库文件变化
+ * 登录/退出/token 刷新时 Cursor 会修改 state.vscdb，
+ * 检测到 mtime 变化后立即刷新插件状态
  */
-function startLoginDetection() {
-  stopLoginDetection();
-  let attempts = 0;
-  const MAX_ATTEMPTS = 90; // 最多检测 3 分钟
-
-  loginDetectionTimer = setInterval(async () => {
-    attempts++;
-    if (attempts > MAX_ATTEMPTS) {
-      stopLoginDetection();
+function setupCursorAuthWatcher(context: vscode.ExtensionContext) {
+  try {
+    const dbPath = getCursorStoragePath();
+    if (!fs.existsSync(dbPath)) {
+      console.log('[Cursor Cost Info] SQLite 数据库不存在，跳过监听:', dbPath);
       return;
     }
-    const auth = await resolveAuth();
-    if (auth) {
-      stopLoginDetection();
-      await updateUsageInfo();
-    }
-  }, 2000);
-}
 
-function stopLoginDetection() {
-  if (loginDetectionTimer) {
-    clearInterval(loginDetectionTimer);
-    loginDetectionTimer = undefined;
+    fs.watchFile(dbPath, { interval: 1000 }, (curr, prev) => {
+      if (curr.mtimeMs > 0 && curr.mtimeMs !== prev.mtimeMs) {
+        console.log('[Cursor Cost Info] 检测到 Cursor 数据库变化，立即刷新状态');
+        updateUsageInfo();
+      }
+    });
+
+    context.subscriptions.push({
+      dispose: () => {
+        fs.unwatchFile(dbPath);
+      }
+    });
+
+    console.log('[Cursor Cost Info] Cursor 认证状态监听已启动:', dbPath);
+  } catch (err) {
+    console.error('[Cursor Cost Info] Cursor 认证状态监听失败:', err);
   }
 }
 
@@ -161,7 +162,6 @@ function stopPolling() {
  */
 export function deactivate() {
   stopPolling();
-  stopLoginDetection();
 }
 
 /**

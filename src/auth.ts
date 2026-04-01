@@ -22,7 +22,7 @@ export function initializeAuthStorage(storage: vscode.Memento): void {
  * 根据操作系统返回 Cursor 的 globalStorage 数据库路径
  * @returns state.vscdb 文件的绝对路径
  */
-function getCursorStoragePath(): string {
+export function getCursorStoragePath(): string {
     const platform = os.platform();
     const homeDir = os.homedir();
 
