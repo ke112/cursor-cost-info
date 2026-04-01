@@ -19,7 +19,6 @@ let lastNotificationPercentage: number | null = null;
 let currentUsageEvents: UsageEvent[] = [];
 let currentEmail: string | null = null;
 let isWindowFocused = true;
-let hasShownLoginPrompt = false;
 
 /**
  * 扩展激活时调用
@@ -219,11 +218,8 @@ async function updateUsageInfo() {
     if (!auth) {
       console.log('[Cursor Cost Info] updateUsageInfo: auth 为空，显示登录提示');
       setLoginRequiredStatus();
-      showLoginPromptOnce();
       return;
     }
-
-    hasShownLoginPrompt = false;
 
     statusBarItem.text = '$(sync~spin) 加载中...';
     statusBarItem.show();
@@ -238,7 +234,6 @@ async function updateUsageInfo() {
     // 如果没有账号信息（email 为空），判断为未登录，显示登录提示
     if (!currentEmail) {
       setLoginRequiredStatus();
-      showLoginPromptOnce();
       return;
     }
 
@@ -320,15 +315,6 @@ function setLoginRequiredStatus() {
   statusBarItem.color = '#F48771';
   statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
   statusBarItem.show();
-}
-
-function showLoginPromptOnce() {
-  if (hasShownLoginPrompt) {
-    return;
-  }
-
-  hasShownLoginPrompt = true;
-  vscode.window.showWarningMessage('Cursor Cost: 请点击状态栏登录 Cursor 账号');
 }
 
 /**
