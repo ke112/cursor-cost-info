@@ -55,13 +55,24 @@ async function readCursorCookieFromBrowser(): Promise<string | null> {
  * @returns 认证凭据，全部失败则返回 null
  */
 export async function resolveAuth(): Promise<AuthCredentials | null> {
-    // 优先从 Cursor SQLite 读取（真正的登录状态）
+    // 优先从 Cursor SQLite 读取（真正的登录状态，作为权威来源）
     const token = await readCursorAccessToken();
     if (token) {
         return { type: 'token', value: token };
     }
 
-    // SQLite 没有则使用扩展自己存储的会话（Web 授权后会有）
+    // SQLite 数据库存在但无 token，说明用户已退出登录，不再使用备用方案
+    // 仅当 SQLite 数据库不存在时（非 Cursor 环境），才尝试备用方案
+    try {
+        const { getCursorStoragePath } = await import('./auth');
+        const dbPath = getCursorStoragePath();
+        const { existsSync } = await import('fs');
+        if (existsSync(dbPath)) {
+            return null;
+        }
+    } catch {}
+
+    // SQLite 不存在，使用备用方案
     const storedSession = readStoredAuthSession();
     if (storedSession?.accessToken) {
         return { type: 'token', value: storedSession.accessToken };

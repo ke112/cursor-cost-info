@@ -7,7 +7,7 @@ import { extractEmailFromToken, getCursorStoragePath, initializeAuthStorage, rea
 import { getCompanyOnDemandLimit, getConfigHelpText, resolveAuth } from './config';
 
 /** 刷新间隔（毫秒） */
-const REFRESH_INTERVAL = 30000;
+const REFRESH_INTERVAL = 10000;
 
 /** 通知阈值百分比列表 */
 const NOTIFICATION_THRESHOLDS = [80, 85, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100];
