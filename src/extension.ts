@@ -20,6 +20,7 @@ let currentUsageEvents: UsageEvent[] = [];
 let currentEmail: string | null = null;
 let isWindowFocused = true;
 let hasShownLoginPrompt = false;
+let loginDetectionTimer: NodeJS.Timeout | undefined;
 
 /**
  * 扩展激活时调用
@@ -63,6 +64,8 @@ export function activate(context: vscode.ExtensionContext) {
     async () => {
       try {
         await vscode.commands.executeCommand('editor.cpp.login');
+        // 登录命令执行后，短间隔轮询检测登录状态变化，及时刷新状态栏
+        startLoginDetection();
       } catch (err) {
         console.error('[Cursor Cost Info] 触发登录失败:', err);
         await vscode.env.openExternal(vscode.Uri.parse('https://cursor.com/cn/settings'));
@@ -105,6 +108,35 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 /**
+ * 登录命令执行后，以 2 秒间隔检测登录状态，检测到登录后自动停止
+ */
+function startLoginDetection() {
+  stopLoginDetection();
+  let attempts = 0;
+  const MAX_ATTEMPTS = 90; // 最多检测 3 分钟
+
+  loginDetectionTimer = setInterval(async () => {
+    attempts++;
+    if (attempts > MAX_ATTEMPTS) {
+      stopLoginDetection();
+      return;
+    }
+    const auth = await resolveAuth();
+    if (auth) {
+      stopLoginDetection();
+      await updateUsageInfo();
+    }
+  }, 2000);
+}
+
+function stopLoginDetection() {
+  if (loginDetectionTimer) {
+    clearInterval(loginDetectionTimer);
+    loginDetectionTimer = undefined;
+  }
+}
+
+/**
  * 启动定时轮询
  */
 function startPolling() {
@@ -129,6 +161,7 @@ function stopPolling() {
  */
 export function deactivate() {
   stopPolling();
+  stopLoginDetection();
 }
 
 /**
@@ -259,13 +292,20 @@ async function updateUsageInfo() {
   } catch (error) {
     console.error('[Cursor Cost Info] updateUsageInfo 失败:', error);
 
+    const errMsg = error instanceof Error ? error.message : '未知错误';
+
+    // 401 表示 token 过期或已退出登录，直接显示登录提示
+    if (errMsg.includes('401')) {
+      setLoginRequiredStatus();
+      return;
+    }
+
     statusBarItem.text = '$(error) Cursor: 获取失败';
-    statusBarItem.tooltip = `错误: ${error instanceof Error ? error.message : '未知错误'}\n先查看浏览器中是否登录成功且能正常访问，如正常则点击立即重试\n\n💡 点击立即重试`;
+    statusBarItem.tooltip = `错误: ${errMsg}\n先查看浏览器中是否登录成功且能正常访问，如正常则点击立即重试\n\n💡 点击立即重试`;
     statusBarItem.command = 'cursor.costInfo.refresh';
     statusBarItem.color = '#F48771';
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     statusBarItem.show();
-    // 不弹出悬浮错误提示，仅在状态栏显示失败态，点击可重试
   }
 }
 
