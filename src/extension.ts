@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { calculateTotalUsage, fetchUsageEvents, fetchUsageSummaryAuto, formatCurrency, formatTimestamp, formatTokenCount, formatUsageDisplay, getUsageColor, USAGE_EVENT_KIND_USAGE_BASED, UsageEvent, UsageSummary } from './api';
-import { getCursorStoragePath, initializeAuthStorage, readCursorCachedEmail } from './auth';
+import { extractEmailFromToken, getCursorStoragePath, initializeAuthStorage, readCursorCachedEmail } from './auth';
 import { getCompanyOnDemandLimit, getConfigHelpText, resolveAuth } from './config';
 
 /** 刷新间隔（毫秒） */
@@ -229,6 +229,10 @@ async function updateUsageInfo() {
     statusBarItem.show();
 
     currentEmail = await readCursorCachedEmail();
+    // SQLite cachedEmail 可能还未写入，从 JWT token 直接解码 email 作为备选
+    if (!currentEmail && auth.type === 'token') {
+      currentEmail = extractEmailFromToken(auth.value);
+    }
     console.log('[Cursor Cost Info] readCursorCachedEmail 结果:', currentEmail);
 
     // 如果没有账号信息（email 为空），判断为未登录，显示登录提示
