@@ -200,6 +200,15 @@ async function updateUsageInfo() {
     statusBarItem.show();
 
     currentEmail = await readCursorCachedEmail();
+
+    // 如果没有账号信息（email 为空），判断为未登录，显示登录提示
+    if (!currentEmail) {
+      await storeExtensionAuthSession(null!);
+      setLoginRequiredStatus();
+      showLoginPromptOnce();
+      return;
+    }
+
     const summary = await fetchUsageSummaryAuto(auth);
 
     // 获取使用事件
