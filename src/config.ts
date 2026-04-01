@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { readCursorAccessToken } from './auth';
+import { readCursorAccessToken, readStoredAuthSession } from './auth';
 
 const CURSOR_COOKIE_DOMAIN = 'cursor.com';
 
@@ -50,13 +50,21 @@ async function readCursorCookieFromBrowser(): Promise<string | null> {
 /**
  * 统一认证解析，按优先级依次尝试：
  * 1. Cursor 本地 SQLite 数据库中的 accessToken（自动登录，零配置）
- * 2. 浏览器中 cursor.com 的 Cookie（备用方案）
+ * 2. Extension 自己的存储会话（Web 授权后存储的，备用）
+ * 3. 浏览器中 cursor.com 的 Cookie（备用方案）
  * @returns 认证凭据，全部失败则返回 null
  */
 export async function resolveAuth(): Promise<AuthCredentials | null> {
+    // 优先从 Cursor SQLite 读取（真正的登录状态）
     const token = await readCursorAccessToken();
     if (token) {
         return { type: 'token', value: token };
+    }
+
+    // SQLite 没有则使用扩展自己存储的会话（Web 授权后会有）
+    const storedSession = readStoredAuthSession();
+    if (storedSession?.accessToken) {
+        return { type: 'token', value: storedSession.accessToken };
     }
 
     const browserCookie = await readCursorCookieFromBrowser();

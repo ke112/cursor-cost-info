@@ -112,13 +112,36 @@ export function extractUserIdFromToken(token: string): string | null {
 }
 
 /**
+ * 从 JWT token 中提取 email
+ * JWT payload 中 email 可能用 'email' 或 'https://email' 作为 key
+ * @param token JWT accessToken
+ * @returns email 字符串，解析失败返回 null
+ */
+export function extractEmailFromToken(token: string): string | null {
+    try {
+        const payload = parseJwtPayload(token);
+        if (!payload) { return null; }
+        // 尝试多种常见的 email 字段名
+        const email = (payload.email ?? payload['https://email'] ?? payload.plain_email) as string;
+        if (email && typeof email === 'string') {
+            return email;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * 从 Cursor 本地 SQLite 数据库读取缓存的登录邮箱
  * @returns 邮箱字符串，读取失败返回 null
  */
 export async function readCursorCachedEmail(): Promise<string | null> {
     try {
         const dbPath = getCursorStoragePath();
-        if (!fs.existsSync(dbPath)) { return readStoredAuthSession()?.email ?? null; }
+        if (!fs.existsSync(dbPath)) {
+            return extractEmailFromStoredSession();
+        }
         const email = await querySqlite(
             dbPath,
             "SELECT value FROM ItemTable WHERE key='cursorAuth/cachedEmail';"
@@ -126,10 +149,51 @@ export async function readCursorCachedEmail(): Promise<string | null> {
         if (email && email.trim().length > 0) {
             return email.trim();
         }
-        return readStoredAuthSession()?.email ?? null;
+        // SQLite 没有 cachedEmail，尝试从 SQLite 的 token 解码获取 email
+        const tokenEmail = await extractEmailFromSqliteToken();
+        if (tokenEmail) {
+            return tokenEmail;
+        }
+        return extractEmailFromStoredSession();
     } catch {
-        return readStoredAuthSession()?.email ?? null;
+        return extractEmailFromStoredSession();
     }
+}
+
+/**
+ * 从 SQLite 数据库的 accessToken 解码获取 email
+ */
+async function extractEmailFromSqliteToken(): Promise<string | null> {
+    try {
+        const dbPath = getCursorStoragePath();
+        if (!fs.existsSync(dbPath)) {
+            return null;
+        }
+        const token = await querySqlite(
+            dbPath,
+            "SELECT value FROM ItemTable WHERE key='cursorAuth/accessToken';"
+        );
+        if (token && token.trim().length > 0) {
+            return extractEmailFromToken(token.trim());
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * 从扩展存储的会话中提取 email，优先使用存储的 email，失败则从 accessToken 解码
+ */
+function extractEmailFromStoredSession(): string | null {
+    const session = readStoredAuthSession();
+    if (session?.email) {
+        return session.email;
+    }
+    if (session?.accessToken) {
+        return extractEmailFromToken(session.accessToken);
+    }
+    return null;
 }
 
 function parseJwtPayload(token: string): Record<string, any> | null {
@@ -169,7 +233,7 @@ export async function storeExtensionAuthSession(session: StoredAuthSession): Pro
     await authStorage.update(AUTH_STORAGE_KEY, session);
 }
 
-function readStoredAuthSession(): StoredAuthSession | null {
+export function readStoredAuthSession(): StoredAuthSession | null {
     const session = authStorage?.get<StoredAuthSession>(AUTH_STORAGE_KEY);
     if (!session?.accessToken) {
         return null;
