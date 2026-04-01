@@ -57,15 +57,19 @@ export function activate(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(refreshCommand);
 
-  // 注册打开 Cursor Settings 命令
-  const openCursorSettingsCommand = vscode.commands.registerCommand(
-    'cursor.costInfo.openCursorSettings',
+  // 注册登录命令：触发 Cursor 原生登录
+  const openLoginCommand = vscode.commands.registerCommand(
+    'cursor.costInfo.openLogin',
     async () => {
-      // 打开 Cursor 特有的设置界面
-      await vscode.env.openExternal(vscode.Uri.parse('https://cursor.com/cn/settings'));
+      try {
+        await vscode.commands.executeCommand('editor.cpp.login');
+      } catch (err) {
+        console.error('[Cursor Cost Info] 触发登录失败:', err);
+        await vscode.env.openExternal(vscode.Uri.parse('https://cursor.com/cn/settings'));
+      }
     }
   );
-  context.subscriptions.push(openCursorSettingsCommand);
+  context.subscriptions.push(openLoginCommand);
 
   // 监听窗口焦点变化：非活跃时停止轮询，活跃时恢复轮询
   context.subscriptions.push(
@@ -267,8 +271,8 @@ async function updateUsageInfo() {
 
 function setLoginRequiredStatus() {
   statusBarItem.text = '$(account) Cursor: 请登录';
-  statusBarItem.tooltip = '点击打开 Cursor Settings 进行登录';
-  statusBarItem.command = 'cursor.costInfo.openCursorSettings';
+  statusBarItem.tooltip = '点击登录 Cursor 账号';
+  statusBarItem.command = 'cursor.costInfo.openLogin';
   statusBarItem.color = '#F48771';
   statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
   statusBarItem.show();
@@ -280,7 +284,7 @@ function showLoginPromptOnce() {
   }
 
   hasShownLoginPrompt = true;
-  vscode.window.showWarningMessage('Cursor Cost: 请在 Cursor Settings 中登录账号');
+  vscode.window.showWarningMessage('Cursor Cost: 请点击状态栏登录 Cursor 账号');
 }
 
 /**
