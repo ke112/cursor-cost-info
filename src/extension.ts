@@ -25,6 +25,23 @@ let isWindowFocused = true;
  */
 export function activate(context: vscode.ExtensionContext) {
   console.log('Cursor 额度信息扩展已激活');
+
+  // 非 Cursor 编辑器（如 VS Code）仅显示提示，不启动任何功能
+  const appName = vscode.env.appName || '';
+  if (!appName.toLowerCase().includes('cursor')) {
+    statusBarItem = vscode.window.createStatusBarItem(
+      'cursorCostInfo',
+      vscode.StatusBarAlignment.Left,
+      100
+    );
+    statusBarItem.name = 'Cursor Cost';
+    statusBarItem.text = '$(info) 该插件仅适用于 Cursor 编辑器';
+    statusBarItem.tooltip = 'Cursor Cost Info 插件需要在 Cursor 编辑器中使用，请前往 cursor.com 下载 Cursor';
+    statusBarItem.show();
+    context.subscriptions.push(statusBarItem);
+    return;
+  }
+
   initializeAuthStorage(context.globalState);
 
   // 创建状态栏项
